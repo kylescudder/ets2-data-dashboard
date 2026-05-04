@@ -35,6 +35,14 @@ app.get("/api/drivers", async () => {
   });
 });
 
+const hasTimescale = await query<{ ok: boolean }>(
+  `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') AS ok`,
+).then((r) => r.rows[0]?.ok ?? false);
+
+const dayBucketExpr = hasTimescale
+  ? `time_bucket('1 day', t.time)`
+  : `date_trunc('day', t.time)`;
+
 app.get("/api/drivers/:name/history", async (req) => {
   const { name } = req.params as { name: string };
   const { rows } = await query<{
@@ -42,7 +50,7 @@ app.get("/api/drivers/:name/history", async (req) => {
     avg_speed: number;
     distance_km: number;
   }>(
-    `SELECT time_bucket('1 day', t.time) AS bucket,
+    `SELECT ${dayBucketExpr} AS bucket,
             avg(t.speed_kph) AS avg_speed,
             (max(t.odometer_km) - min(t.odometer_km)) AS distance_km
        FROM telemetry t

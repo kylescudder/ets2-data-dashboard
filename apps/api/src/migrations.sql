@@ -1,5 +1,13 @@
-CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'timescaledb') THEN
+    CREATE EXTENSION IF NOT EXISTS timescaledb;
+  ELSE
+    RAISE NOTICE 'timescaledb extension not available - using plain Postgres';
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS users (
   id          uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -44,6 +52,13 @@ CREATE TABLE IF NOT EXISTS telemetry (
   job_income        double precision
 );
 
-SELECT create_hypertable('telemetry', 'time', if_not_exists => TRUE);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+    PERFORM create_hypertable('telemetry', 'time', if_not_exists => TRUE);
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS telemetry_time_idx ON telemetry (time DESC);
 CREATE INDEX IF NOT EXISTS telemetry_user_time_idx ON telemetry (user_id, time DESC);
 CREATE INDEX IF NOT EXISTS telemetry_session_time_idx ON telemetry (session_id, time DESC);
