@@ -2,15 +2,23 @@
   "name": "ets2-data-dashboard",
   "private": true,
   "version": "0.0.1",
-  "packageManager": "pnpm@9.12.0",
+  "packageManager": "bun@1.2.16",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev:api": "pnpm --filter @ets2/api dev",
-    "dev:web": "pnpm --filter @ets2/web dev",
+    "dev:api": "bun run --filter @ets2/api dev",
+    "dev:web": "bun run --filter @ets2/web dev",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
-    "db:migrate": "pnpm --filter @ets2/api migrate",
-    "db:seed": "pnpm --filter @ets2/api seed",
-    "simulate": "pnpm --filter @ets2/api simulate"
+    "db:migrate": "bun run --filter @ets2/api migrate",
+    "db:seed": "bun run --filter @ets2/api seed",
+    "simulate": "bun run --filter @ets2/api simulate",
+    "sb:start": "supabase start",
+    "sb:stop": "supabase stop",
+    "sb:reset": "supabase db reset",
+    "sb:status": "supabase status"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
