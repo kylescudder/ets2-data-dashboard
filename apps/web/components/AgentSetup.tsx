@@ -9,6 +9,9 @@ interface AgentSetupProps {
   apiKey: string;
 }
 
+const AGENT_DOWNLOAD_URL =
+  "https://github.com/kylescudder/ets2-data-dashboard/releases/latest/download/ets2-tracker.exe";
+
 function generateKey(): string {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
@@ -70,11 +73,19 @@ export function AgentSetup({ userId, apiKey }: AgentSetupProps) {
       <div>
         <h2 className="text-lg font-bold">Agent setup</h2>
         <p className="text-xs text-slate-500 mt-1">
-          The Windows telemetry agent identifies you with this key. Paste the
-          snippet below into <code>%USERPROFILE%\.ets2-tracker\config.json</code>
-          and start the agent with <code>bun dev:client</code>.
+          The Windows telemetry agent identifies you with the API key below.
+          Download the .exe, drop the config snippet into
+          <code className="mx-1">%USERPROFILE%\.ets2-tracker\config.json</code>,
+          then double-click the .exe with ETS2 running.
         </p>
       </div>
+
+      <a
+        href={AGENT_DOWNLOAD_URL}
+        className="inline-flex items-center justify-center rounded bg-accent text-ink font-semibold px-4 py-2 hover:brightness-110"
+      >
+        Download ets2-tracker.exe
+      </a>
 
       <div>
         <label className="block text-xs uppercase tracking-wide text-slate-500 mb-1">

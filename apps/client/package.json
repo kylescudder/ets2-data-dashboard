@@ -6,7 +6,8 @@
   "os": ["win32"],
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "build:exe": "bun build --compile --target=bun-windows-x64 src/index.ts --outfile dist/ets2-tracker.exe"
   },
   "dependencies": {
     "@ets2/shared": "workspace:*",

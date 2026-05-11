@@ -4,10 +4,10 @@ export function OnboardingBanner() {
       <div>
         <h2 className="text-lg font-bold text-accent">Welcome — let&apos;s get you on the road</h2>
         <p className="text-sm text-slate-300 mt-1">
-          Live telemetry comes from a small Windows agent on your gaming PC. It reads
-          <code className="mx-1 text-xs">Local\SCSTelemetry</code>
-          (the shared-memory block exposed by scs-sdk-plugin) and POSTs samples to this
-          site. Three one-time steps:
+          Live telemetry comes from a small Windows agent on your gaming PC. It
+          reads <code className="mx-1 text-xs">Local\SCSTelemetry</code> (the
+          shared-memory block exposed by scs-sdk-plugin) and POSTs samples to
+          this site. Three one-time steps:
         </p>
       </div>
 
@@ -22,30 +22,24 @@ export function OnboardingBanner() {
           >
             scs-sdk-plugin
           </a>{" "}
-          into <code className="text-xs">&lt;Steam&gt;\steamapps\common\Euro Truck Simulator 2\bin\win_x64\plugins\</code>{" "}
-          (create the <code className="text-xs">plugins</code> folder if it&apos;s missing).
+          into{" "}
+          <code className="text-xs">
+            &lt;Steam&gt;\steamapps\common\Euro Truck Simulator 2\bin\win_x64\plugins\
+          </code>{" "}
+          (create the <code className="text-xs">plugins</code> folder if it&apos;s
+          missing).
         </li>
         <li>
-          Copy the <span className="font-semibold">config.json</span> snippet below into{" "}
-          <code className="text-xs">%USERPROFILE%\.ets2-tracker\config.json</code> on the
-          same PC.
+          Use the <span className="font-semibold">Download</span> button below to
+          grab <code className="text-xs">ets2-tracker.exe</code>, and copy the{" "}
+          <span className="font-semibold">config.json</span> snippet into{" "}
+          <code className="text-xs">%USERPROFILE%\.ets2-tracker\config.json</code>{" "}
+          (create the folder if needed).
         </li>
         <li>
-          Clone{" "}
-          <a
-            className="underline hover:text-accent"
-            href="https://github.com/kylescudder/ets2-data-dashboard"
-            target="_blank"
-            rel="noreferrer"
-          >
-            the repo
-          </a>{" "}
-          and run <code className="text-xs">bun install &amp;&amp; bun dev:client</code>{" "}
-          (after installing{" "}
-          <a className="underline hover:text-accent" href="https://bun.sh" target="_blank" rel="noreferrer">
-            bun
-          </a>
-          ). Start ETS2 first; the agent connects to the plugin once you&apos;re in-game.
+          Start ETS2 and load a save, then double-click{" "}
+          <code className="text-xs">ets2-tracker.exe</code>. Keep the console
+          window open while you drive — it forwards telemetry in the background.
         </li>
       </ol>
 
