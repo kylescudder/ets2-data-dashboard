@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 import type { ActiveJob, IngestPayload, TelemetrySample, Truck } from "@ets2/shared";
 import { loadConfig } from "./config.js";
 import { BatchBuffer, type PendingBatch } from "./buffer.js";
@@ -27,6 +28,30 @@ let samples: TelemetrySample[] = [];
 let lastTruck: Truck | null = null;
 let lastJob: ActiveJob | null = null;
 let warnedNotRunning = false;
+
+// Steam launch-option wrapper mode: when invoked as
+//   ets2-tracker.exe <game-exe> [game-args...]
+// (which is what `"...\ets2-tracker.exe" %command% -developer -console` expands
+// to), spawn the game as a child process, keep sampling in parallel, and exit
+// when the game exits. With no args we run as a standalone agent — same as
+// double-clicking the .exe.
+const launchArgs = process.argv.slice(1);
+if (launchArgs.length >= 1 && /\.exe$/i.test(launchArgs[0])) {
+  const [gameCmd, ...gameArgs] = launchArgs;
+  console.log(`launcher mode: ${gameCmd} ${gameArgs.join(" ")}`);
+  const child = spawn(gameCmd, gameArgs, {
+    stdio: "inherit",
+    windowsHide: false,
+  });
+  child.on("error", (err) => {
+    console.error("failed to launch game:", err.message);
+  });
+  child.on("exit", (code) => {
+    console.log(`game exited (code ${code ?? "null"}); shutting down agent`);
+    map?.close();
+    process.exit(code ?? 0);
+  });
+}
 
 function tryOpenMap(): boolean {
   try {
