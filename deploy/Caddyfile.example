@@ -1,5 +1,5 @@
 # Place this at /etc/caddy/Caddyfile on the box. Reload after edits with:
-#   sudo caddy reload --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
 #
 # Caddy issues + auto-renews Let's Encrypt certs for every domain listed below.
 # Make sure each domain's A record points at this box before adding it here —
@@ -12,44 +12,63 @@
 }
 
 # ---------------------------------------------------------------------------
-# Per-project stanzas. Each project's Kong port comes from new-project.sh.
-# Add a block per project; reload Caddy after every edit.
+# Per-project stanzas. Each project gets two domains:
+#
+#   api.<project>.<your-domain>     → Kong (API surface)
+#   studio.<project>.<your-domain>  → Kong (also serves Studio at /)
+#
+# Kong sits on KONG_HTTP_PORT (8001, 8011, … set by new-project.sh).
+# Add a pair per project; reload Caddy after every edit.
 # ---------------------------------------------------------------------------
 
-# ETS2 friends tracker — Supabase API
+# ETS2 friends tracker
 api.ets2.kylescudder.co.uk {
     reverse_proxy 127.0.0.1:8001
     encode zstd gzip
 }
 
-# Deadwax Club iOS app — Supabase API
+studio.ets2.kylescudder.co.uk {
+    # Studio is gated by basic auth (DASHBOARD_USERNAME / DASHBOARD_PASSWORD
+    # from .env) but defence-in-depth is cheap. Uncomment to lock down by IP:
+    # @notme not remote_ip 1.2.3.4/32
+    # respond @notme 403
+
+    reverse_proxy 127.0.0.1:8001
+    encode zstd gzip
+}
+
+# Deadwax Club iOS app
 api.deadwaxclub.app {
     reverse_proxy 127.0.0.1:8011
     encode zstd gzip
 }
 
-# Third hobby project — fill in the real domain when you pick one
+studio.deadwax.kylescudder.co.uk {
+    reverse_proxy 127.0.0.1:8011
+    encode zstd gzip
+}
+
+# Third hobby project — fill in once you've picked a domain
 # api.<project>.kylescudder.co.uk {
 #     reverse_proxy 127.0.0.1:8021
 #     encode zstd gzip
 # }
+# studio.<project>.kylescudder.co.uk {
+#     reverse_proxy 127.0.0.1:8021
+#     encode zstd gzip
+# }
 
-# Studio admin UIs — multi-tenant router under one hostname. Restrict to your
-# source IP or wrap with basic auth in addition to Studio's own login.
-studio.kylescudder.co.uk {
-    # Uncomment + paste your office/home IP to lock Studio down.
-    # @notme not remote_ip 1.2.3.4/32
-    # respond @notme 403
+# ---------------------------------------------------------------------------
+# Alternative: multi-tenant Studio under one hostname with paths.
+#
+# This is fragile — Supabase Studio emits absolute /_next/* URLs that don't
+# survive the path-prefix strip, so the page renders blank. Kept as a comment
+# in case Supabase ever fixes that and the per-subdomain approach above
+# becomes overkill.
+# ---------------------------------------------------------------------------
 
-    handle /ets2/* {
-        uri strip_prefix /ets2
-        reverse_proxy 127.0.0.1:8002      # ETS2 Studio = Kong port + 1
-    }
-    handle /deadwax/* {
-        uri strip_prefix /deadwax
-        reverse_proxy 127.0.0.1:8012      # Deadwax Studio = Kong port + 1
-    }
-    handle {
-        respond "supabase studio router — use /ets2 or /deadwax" 200
-    }
-}
+# studio.kylescudder.co.uk {
+#     handle /ets2/*    { uri strip_prefix /ets2;    reverse_proxy 127.0.0.1:8001 }
+#     handle /deadwax/* { uri strip_prefix /deadwax; reverse_proxy 127.0.0.1:8011 }
+#     handle { respond "supabase studio router — use /<project>" 200 }
+# }
