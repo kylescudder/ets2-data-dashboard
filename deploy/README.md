@@ -99,7 +99,7 @@ sudo ln -s /opt/ets2-data-dashboard/deploy/scripts /opt/supabase/_scripts
 ## Bring up your first stack
 
 ```bash
-sudo /opt/supabase/_scripts/new-project.sh ets2 8001 api.ets2.kyle.dev
+sudo /opt/supabase/_scripts/new-project.sh ets2 8001 api.ets2.kylescudder.co.uk
 ```
 
 That:
@@ -130,15 +130,15 @@ sudo caddy reload --config /etc/caddy/Caddyfile
 Smoke test:
 
 ```bash
-curl https://api.ets2.kyle.dev/auth/v1/health
+curl https://api.ets2.kylescudder.co.uk/auth/v1/health
 # {"date":"...","description":"GoTrue is a user registration ...","name":"GoTrue","version":"..."}
 ```
 
 ## Adding more stacks
 
 ```bash
-sudo /opt/supabase/_scripts/new-project.sh ios-app 8011 api.ios.kyle.dev
-sudo /opt/supabase/_scripts/new-project.sh dashboard 8021 api.dashboard.kyle.dev
+sudo /opt/supabase/_scripts/new-project.sh deadwax 8011 api.deadwaxclub.app
+sudo /opt/supabase/_scripts/new-project.sh dashboard 8021 api.dashboard.kylescudder.co.uk
 ```
 
 Each gets its own Kong port spaced 10 apart, leaving room for the per-project
@@ -198,26 +198,26 @@ gunzip -c ets2-20260601T040000Z.sql.gz \
 
 ## Pointing this app (ETS2 tracker) at it
 
-After `new-project.sh ets2 8001 api.ets2.kyle.dev` and Caddy is serving:
+After `new-project.sh ets2 8001 api.ets2.kylescudder.co.uk` and Caddy is serving:
 
 1. `bunx supabase link --project-ref` doesn't apply — link by URL instead.
    From your dev machine:
    ```bash
-   bunx supabase db push --db-url 'postgresql://postgres:<POSTGRES_PASSWORD>@api.ets2.kyle.dev:5432/postgres'
+   bunx supabase db push --db-url 'postgresql://postgres:<POSTGRES_PASSWORD>@api.ets2.kylescudder.co.uk:5432/postgres'
    bunx supabase functions deploy ingest \
      --project-ref ets2 \
-     --api-url https://api.ets2.kyle.dev \
+     --api-url https://api.ets2.kylescudder.co.uk \
      --no-verify-jwt
    ```
    (If you don't expose Postgres externally, run `supabase db push` from the
    box itself against `127.0.0.1:<external-port>` over an SSH tunnel.)
 2. In Netlify (or `apps/web/.env.local` for local dev), set:
    ```
-   NEXT_PUBLIC_SUPABASE_URL = https://api.ets2.kyle.dev
+   NEXT_PUBLIC_SUPABASE_URL = https://api.ets2.kylescudder.co.uk
    NEXT_PUBLIC_SUPABASE_ANON_KEY = <ANON_KEY printed by new-project.sh>
-   NEXT_PUBLIC_INGEST_URL = https://api.ets2.kyle.dev/functions/v1/ingest
+   NEXT_PUBLIC_INGEST_URL = https://api.ets2.kylescudder.co.uk/functions/v1/ingest
    ```
-3. In Supabase Studio (`https://studio.kyle.dev/ets2/`), open Authentication
+3. In Supabase Studio (`https://studio.kylescudder.co.uk/ets2/`), open Authentication
    → URL Configuration and add your Netlify URL(s) to "Redirect URLs".
 4. Magic-link sign in once on the Netlify URL; the DB trigger will create
    your `public.users` row with an `api_key`, and `/profile` will surface it
