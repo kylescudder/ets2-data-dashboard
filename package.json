@@ -10,6 +10,7 @@
   "scripts": {
     "dev:api": "bun run --filter @ets2/api dev",
     "dev:web": "bun run --filter @ets2/web dev",
+    "dev:client": "bun run --filter @ets2/client dev",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "db:migrate": "bun run --filter @ets2/api migrate",
