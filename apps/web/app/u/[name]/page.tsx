@@ -29,7 +29,7 @@ export default async function DriverPage({
     supabase
       .from("telemetry")
       .select(
-        "time, speed_kph, fuel_litres, odometer_km, job_cargo, job_source, job_destination",
+        "time, speed_kph, fuel_litres, odometer_km, job_id, jobs ( cargo, source_city, destination_city )",
       )
       .eq("user_id", user.id)
       .order("time", { ascending: false })

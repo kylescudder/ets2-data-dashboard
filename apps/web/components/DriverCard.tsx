@@ -3,13 +3,18 @@ import type { DriverRow } from "../lib/useLiveDrivers";
 
 function fmt(n: number | undefined, digits = 0) {
   if (n === undefined || n === null) return "—";
-  return n.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+  return n.toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  });
 }
 
 export function DriverCard({ d }: { d: DriverRow }) {
   const sample = d.latest;
-  const job = sample?.job ?? null;
-  const fuelPct = sample ? Math.round((sample.fuelLitres / sample.fuelCapacityLitres) * 100) : 0;
+  const fuelPct =
+    sample && d.fuelCapacityLitres
+      ? Math.round((sample.fuelLitres / d.fuelCapacityLitres) * 100)
+      : null;
   return (
     <Link
       href={`/u/${d.name}`}
@@ -46,18 +51,21 @@ export function DriverCard({ d }: { d: DriverRow }) {
       <div className="mb-3">
         <div className="flex justify-between text-xs text-slate-400 mb-1">
           <span>Fuel</span>
-          <span>{fuelPct}%</span>
+          <span>{fuelPct != null ? `${fuelPct}%` : "—"}</span>
         </div>
         <div className="h-1.5 bg-edge rounded-full overflow-hidden">
-          <div className="h-full bg-accent" style={{ width: `${fuelPct}%` }} />
+          <div
+            className="h-full bg-accent"
+            style={{ width: `${fuelPct ?? 0}%` }}
+          />
         </div>
       </div>
 
-      {job ? (
+      {d.job ? (
         <div className="text-xs text-slate-300 border-t border-edge pt-3">
-          <div className="font-medium text-slate-100">{job.cargo}</div>
+          <div className="font-medium text-slate-100">{d.job.cargo}</div>
           <div className="text-slate-400">
-            {job.sourceCity} → {job.destinationCity} · {fmt(job.remainingKm, 0)} km left
+            {d.job.sourceCity} → {d.job.destinationCity}
           </div>
         </div>
       ) : (

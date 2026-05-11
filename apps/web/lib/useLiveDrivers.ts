@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { TelemetrySample } from "@ets2/shared";
+import type { ActiveJob, TelemetrySample } from "@ets2/shared";
 import { supabaseBrowser } from "./supabase/client";
 
 export interface DriverRow {
@@ -11,7 +11,9 @@ export interface DriverRow {
   avatarUrl: string | null;
   status: "online" | "offline";
   truck: { make: string; model: string } | null;
+  fuelCapacityLitres: number | null;
   latest: TelemetrySample | null;
+  job: ActiveJob | null;
 }
 
 const ONLINE_TTL_MS = 30_000;
@@ -20,27 +22,40 @@ interface TelemetryRow {
   time: string;
   session_id: string;
   user_id: string;
+  job_id: string | null;
   speed_kph: number;
   rpm: number;
   gear: number;
   fuel_litres: number;
-  fuel_capacity_l: number;
   odometer_km: number;
   truck_damage: number;
   cargo_damage: number;
   pos_x: number;
-  pos_y: number;
   pos_z: number;
   heading: number;
-  job_cargo: string | null;
-  job_source: string | null;
-  job_destination: string | null;
-  job_remaining_km: number | null;
-  job_income: number | null;
 }
 
 const TELEMETRY_COLS =
-  "time, session_id, user_id, speed_kph, rpm, gear, fuel_litres, fuel_capacity_l, odometer_km, truck_damage, cargo_damage, pos_x, pos_y, pos_z, heading, job_cargo, job_source, job_destination, job_remaining_km, job_income";
+  "time, session_id, user_id, job_id, speed_kph, rpm, gear, fuel_litres, odometer_km, truck_damage, cargo_damage, pos_x, pos_z, heading";
+
+interface SessionRow {
+  id: string;
+  fuel_capacity_litres: number | null;
+  vehicles: { make: string; model: string } | null;
+}
+
+interface JobRow {
+  id: string;
+  cargo: string;
+  source_city: string | null;
+  destination_city: string | null;
+  income: number | null;
+}
+
+interface SessionInfo {
+  truck: { make: string; model: string } | null;
+  fuelCapacityLitres: number | null;
+}
 
 function rowToSample(r: TelemetryRow): TelemetrySample {
   return {
@@ -49,21 +64,29 @@ function rowToSample(r: TelemetryRow): TelemetrySample {
     rpm: r.rpm,
     gear: r.gear,
     fuelLitres: r.fuel_litres,
-    fuelCapacityLitres: r.fuel_capacity_l,
     odometerKm: r.odometer_km,
     truckDamage: r.truck_damage,
     cargoDamage: r.cargo_damage,
-    position: { x: r.pos_x, y: r.pos_y, z: r.pos_z, heading: r.heading },
-    job: r.job_cargo
-      ? {
-          cargo: r.job_cargo,
-          sourceCity: r.job_source ?? "",
-          destinationCity: r.job_destination ?? "",
-          remainingKm: r.job_remaining_km ?? 0,
-          deliveryDeadline: null,
-          income: r.job_income ?? 0,
-        }
-      : null,
+    position: { x: r.pos_x, z: r.pos_z, heading: r.heading },
+  };
+}
+
+function jobRowToActive(j: JobRow): ActiveJob {
+  return {
+    cargo: j.cargo,
+    sourceCity: j.source_city ?? "",
+    destinationCity: j.destination_city ?? "",
+    income: j.income ?? 0,
+  };
+}
+
+function sessionRowToInfo(s: SessionRow): SessionInfo {
+  return {
+    truck:
+      s.vehicles?.make && s.vehicles?.model
+        ? { make: s.vehicles.make, model: s.vehicles.model }
+        : null,
+    fuelCapacityLitres: s.fuel_capacity_litres,
   };
 }
 
@@ -73,9 +96,8 @@ export function useLiveDrivers() {
   const offlineTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
-  const truckBySession = useRef<
-    Map<string, { make: string; model: string }>
-  >(new Map());
+  const sessionInfo = useRef<Map<string, SessionInfo>>(new Map());
+  const jobById = useRef<Map<string, ActiveJob>>(new Map());
 
   useEffect(() => {
     const supabase = supabaseBrowser();
@@ -97,6 +119,34 @@ export function useLiveDrivers() {
       offlineTimers.current.set(userId, t);
     }
 
+    async function fetchJob(id: string): Promise<ActiveJob | null> {
+      const cached = jobById.current.get(id);
+      if (cached) return cached;
+      const { data } = await supabase
+        .from("jobs")
+        .select("cargo, source_city, destination_city, income")
+        .eq("id", id)
+        .maybeSingle<JobRow>();
+      if (!data) return null;
+      const j = jobRowToActive({ ...data, id });
+      jobById.current.set(id, j);
+      return j;
+    }
+
+    async function fetchSession(id: string): Promise<SessionInfo | null> {
+      const cached = sessionInfo.current.get(id);
+      if (cached) return cached;
+      const { data } = await supabase
+        .from("sessions")
+        .select("id, fuel_capacity_litres, vehicles ( make, model )")
+        .eq("id", id)
+        .maybeSingle<SessionRow>();
+      if (!data) return null;
+      const info = sessionRowToInfo(data);
+      sessionInfo.current.set(id, info);
+      return info;
+    }
+
     async function loadInitial() {
       const since = new Date(Date.now() - ONLINE_TTL_MS).toISOString();
 
@@ -114,25 +164,32 @@ export function useLiveDrivers() {
 
       const latestByUser = new Map<string, TelemetryRow>();
       const sessionIds = new Set<string>();
+      const jobIds = new Set<string>();
       for (const r of (recent ?? []) as TelemetryRow[]) {
         if (!latestByUser.has(r.user_id)) {
           latestByUser.set(r.user_id, r);
           sessionIds.add(r.session_id);
+          if (r.job_id) jobIds.add(r.job_id);
         }
       }
 
       if (sessionIds.size > 0) {
         const { data: sessions } = await supabase
           .from("sessions")
-          .select("id, truck_make, truck_model")
+          .select("id, fuel_capacity_litres, vehicles ( make, model )")
           .in("id", [...sessionIds]);
-        for (const s of sessions ?? []) {
-          if (s.truck_make && s.truck_model) {
-            truckBySession.current.set(s.id, {
-              make: s.truck_make,
-              model: s.truck_model,
-            });
-          }
+        for (const s of (sessions ?? []) as unknown as SessionRow[]) {
+          sessionInfo.current.set(s.id, sessionRowToInfo(s));
+        }
+      }
+
+      if (jobIds.size > 0) {
+        const { data: jobs } = await supabase
+          .from("jobs")
+          .select("id, cargo, source_city, destination_city, income")
+          .in("id", [...jobIds]);
+        for (const j of (jobs ?? []) as JobRow[]) {
+          jobById.current.set(j.id, jobRowToActive(j));
         }
       }
 
@@ -140,16 +197,17 @@ export function useLiveDrivers() {
       setDrivers(
         users.map((u) => {
           const latest = latestByUser.get(u.id);
+          const info = latest ? sessionInfo.current.get(latest.session_id) : null;
           return {
             userId: u.id,
             name: u.name,
             displayName: u.display_name,
             avatarUrl: u.avatar_url,
             status: latest ? "online" : "offline",
-            truck: latest
-              ? truckBySession.current.get(latest.session_id) ?? null
-              : null,
+            truck: info?.truck ?? null,
+            fuelCapacityLitres: info?.fuelCapacityLitres ?? null,
             latest: latest ? rowToSample(latest) : null,
+            job: latest?.job_id ? jobById.current.get(latest.job_id) ?? null : null,
           };
         }),
       );
@@ -163,8 +221,13 @@ export function useLiveDrivers() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "telemetry" },
-        (payload) => {
+        async (payload) => {
           const row = payload.new as TelemetryRow;
+          const job = row.job_id ? await fetchJob(row.job_id) : null;
+          const info =
+            sessionInfo.current.get(row.session_id) ??
+            (await fetchSession(row.session_id));
+
           setDrivers((prev) =>
             prev.map((d) =>
               d.userId === row.user_id
@@ -172,31 +235,15 @@ export function useLiveDrivers() {
                     ...d,
                     status: "online" as const,
                     latest: rowToSample(row),
-                    truck: truckBySession.current.get(row.session_id) ?? d.truck,
+                    truck: info?.truck ?? d.truck,
+                    fuelCapacityLitres:
+                      info?.fuelCapacityLitres ?? d.fuelCapacityLitres,
+                    job,
                   }
                 : d,
             ),
           );
           scheduleOffline(row.user_id, row.time);
-
-          if (!truckBySession.current.has(row.session_id)) {
-            supabase
-              .from("sessions")
-              .select("truck_make, truck_model")
-              .eq("id", row.session_id)
-              .single()
-              .then(({ data }) => {
-                if (data?.truck_make && data?.truck_model) {
-                  const truck = { make: data.truck_make, model: data.truck_model };
-                  truckBySession.current.set(row.session_id, truck);
-                  setDrivers((prev) =>
-                    prev.map((d) =>
-                      d.userId === row.user_id ? { ...d, truck } : d,
-                    ),
-                  );
-                }
-              });
-          }
         },
       )
       .subscribe((status) => setConnected(status === "SUBSCRIBED"));

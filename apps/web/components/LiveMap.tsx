@@ -88,14 +88,11 @@ export function LiveMap() {
                   <div style={{ marginTop: 4, fontSize: 13 }}>
                     {Math.round(sample.speedKph)} km/h · gear {sample.gear}
                   </div>
-                  {sample.job ? (
+                  {d.job ? (
                     <div style={{ marginTop: 4, fontSize: 12 }}>
-                      <div>{sample.job.cargo}</div>
+                      <div>{d.job.cargo}</div>
                       <div style={{ color: "#475569" }}>
-                        {sample.job.sourceCity} → {sample.job.destinationCity}
-                        {sample.job.remainingKm != null
-                          ? ` · ${Math.round(sample.job.remainingKm)} km left`
-                          : ""}
+                        {d.job.sourceCity} → {d.job.destinationCity}
                       </div>
                     </div>
                   ) : null}

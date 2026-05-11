@@ -1,16 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "../lib/supabase/client";
+
+interface JobInfo {
+  cargo: string;
+  source_city: string | null;
+  destination_city: string | null;
+}
 
 export interface RecentRow {
   time: string;
   speed_kph: number;
   fuel_litres: number;
   odometer_km: number;
-  job_cargo: string | null;
-  job_source: string | null;
-  job_destination: string | null;
+  job_id: string | null;
+  jobs: JobInfo | null;
+}
+
+interface TelemetryInsert {
+  time: string;
+  speed_kph: number;
+  fuel_litres: number;
+  odometer_km: number;
+  job_id: string | null;
 }
 
 const MAX_ROWS = 200;
@@ -23,9 +36,32 @@ export function RecentTelemetryTable({
   initial: RecentRow[];
 }) {
   const [rows, setRows] = useState<RecentRow[]>(initial);
+  const jobCache = useRef<Map<string, JobInfo>>(
+    new Map(
+      initial
+        .filter((r): r is RecentRow & { job_id: string; jobs: JobInfo } =>
+          Boolean(r.job_id && r.jobs),
+        )
+        .map((r) => [r.job_id, r.jobs]),
+    ),
+  );
 
   useEffect(() => {
     const supabase = supabaseBrowser();
+
+    async function lookupJob(jobId: string): Promise<JobInfo | null> {
+      const cached = jobCache.current.get(jobId);
+      if (cached) return cached;
+      const { data } = await supabase
+        .from("jobs")
+        .select("cargo, source_city, destination_city")
+        .eq("id", jobId)
+        .maybeSingle<JobInfo>();
+      if (!data) return null;
+      jobCache.current.set(jobId, data);
+      return data;
+    }
+
     const channel = supabase
       .channel(`recent-${userId}`)
       .on(
@@ -36,8 +72,17 @@ export function RecentTelemetryTable({
           table: "telemetry",
           filter: `user_id=eq.${userId}`,
         },
-        (payload) => {
-          const r = payload.new as RecentRow;
+        async (payload) => {
+          const raw = payload.new as TelemetryInsert;
+          const jobs = raw.job_id ? await lookupJob(raw.job_id) : null;
+          const r: RecentRow = {
+            time: raw.time,
+            speed_kph: raw.speed_kph,
+            fuel_litres: raw.fuel_litres,
+            odometer_km: raw.odometer_km,
+            job_id: raw.job_id,
+            jobs,
+          };
           setRows((prev) => [r, ...prev].slice(0, MAX_ROWS));
         },
       )
@@ -70,8 +115,8 @@ export function RecentTelemetryTable({
               {Math.round(r.odometer_km).toLocaleString()} km
             </td>
             <td className="px-4 py-2 text-slate-400">
-              {r.job_source && r.job_destination
-                ? `${r.job_source} → ${r.job_destination}`
+              {r.jobs?.source_city && r.jobs?.destination_city
+                ? `${r.jobs.source_city} → ${r.jobs.destination_city}`
                 : "—"}
             </td>
           </tr>

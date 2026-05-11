@@ -1,4 +1,4 @@
-import type { TelemetrySample } from "@ets2/shared";
+import type { ActiveJob, TelemetrySample } from "@ets2/shared";
 
 // Offsets into the scs-sdk-plugin SCSTelemetry shared memory block.
 // Layout is documented in scs-telemetry/inc/scs-telemetry-common.hpp on the
@@ -27,7 +27,6 @@ const O_ROUTE_DISTANCE = 1060;
 const O_JOB_CARGO_DAMAGE = 1468;
 
 const O_COORD_X = 2200;
-const O_COORD_Y = 2208;
 const O_COORD_Z = 2216;
 const O_ROT_X = 2224;
 
@@ -52,7 +51,7 @@ function readCString(buf: Buffer, offset: number, max = STR): string {
 export interface TelemetryStatic {
   sdkActive: boolean;
   paused: boolean;
-  truck: { make: string; model: string };
+  truck: { make: string; model: string; fuelCapacityLitres: number };
   onJob: boolean;
 }
 
@@ -63,6 +62,7 @@ export function decodeStatic(buf: Buffer): TelemetryStatic {
     truck: {
       make: readCString(buf, O_TRUCK_BRAND) || "Unknown",
       model: readCString(buf, O_TRUCK_NAME) || "Unknown",
+      fuelCapacityLitres: buf.readFloatLE(O_FUEL_CAPACITY),
     },
     onJob: buf[O_ON_JOB] !== 0,
   };
@@ -77,19 +77,13 @@ export function decodeSample(buf: Buffer, recordedAt: string): TelemetrySample {
   const wearCabin = buf.readFloatLE(O_WEAR_CABIN);
   const wearChassis = buf.readFloatLE(O_WEAR_CHASSIS);
   const wearWheels = buf.readFloatLE(O_WEAR_WHEELS);
-  const truckDamage = Math.max(wearEngine, wearTransmission, wearCabin, wearChassis, wearWheels);
-
-  const onJob = buf[O_ON_JOB] !== 0;
-  const job = onJob
-    ? {
-        cargo: readCString(buf, O_CARGO),
-        sourceCity: readCString(buf, O_CITY_SRC),
-        destinationCity: readCString(buf, O_CITY_DST),
-        remainingKm: buf.readFloatLE(O_ROUTE_DISTANCE) / 1000,
-        deliveryDeadline: null,
-        income: Number(buf.readBigUInt64LE(O_JOB_INCOME)),
-      }
-    : null;
+  const truckDamage = Math.max(
+    wearEngine,
+    wearTransmission,
+    wearCabin,
+    wearChassis,
+    wearWheels,
+  );
 
   return {
     recordedAt,
@@ -97,17 +91,28 @@ export function decodeSample(buf: Buffer, recordedAt: string): TelemetrySample {
     rpm: buf.readFloatLE(O_ENGINE_RPM),
     gear: buf.readInt32LE(O_GEAR),
     fuelLitres: buf.readFloatLE(O_FUEL),
-    fuelCapacityLitres: buf.readFloatLE(O_FUEL_CAPACITY),
     odometerKm: buf.readFloatLE(O_TRUCK_ODOMETER),
     truckDamage,
     cargoDamage: buf.readFloatLE(O_JOB_CARGO_DAMAGE),
     position: {
       x: buf.readDoubleLE(O_COORD_X),
-      y: buf.readDoubleLE(O_COORD_Y),
       z: buf.readDoubleLE(O_COORD_Z),
       heading,
     },
-    job,
+  };
+}
+
+// Returns the currently-active job if one is being run, or null otherwise.
+// Sent at the batch level (constant within a 1-second flush window), not
+// per-sample — server uses it to find/create a `jobs` row and link each
+// sample's `job_id` to it.
+export function decodeJob(buf: Buffer): ActiveJob | null {
+  if (buf[O_ON_JOB] === 0) return null;
+  return {
+    cargo: readCString(buf, O_CARGO),
+    sourceCity: readCString(buf, O_CITY_SRC),
+    destinationCity: readCString(buf, O_CITY_DST),
+    income: Number(buf.readBigUInt64LE(O_JOB_INCOME)),
   };
 }
 
