@@ -7,7 +7,7 @@ export function OnboardingBanner() {
           Live telemetry comes from a small Windows agent on your gaming PC. It
           reads <code className="mx-1 text-xs">Local\SCSTelemetry</code> (the
           shared-memory block exposed by scs-sdk-plugin) and POSTs samples to
-          this site. Three one-time steps:
+          this site. Four one-time steps:
         </p>
       </div>
 
@@ -30,16 +30,39 @@ export function OnboardingBanner() {
           missing).
         </li>
         <li>
-          Use the <span className="font-semibold">Download</span> button below to
-          grab <code className="text-xs">ets2-tracker.exe</code>, and copy the{" "}
-          <span className="font-semibold">config.json</span> snippet into{" "}
-          <code className="text-xs">%USERPROFILE%\.ets2-tracker\config.json</code>{" "}
-          (create the folder if needed).
+          Download the latest{" "}
+          <a
+            className="underline hover:text-accent"
+            href="https://github.com/kylescudder/ets2-data-dashboard/releases/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <code className="text-xs">ets2-tracker.exe</code> release
+          </a>
+          .
         </li>
         <li>
-          Start ETS2 and load a save, then double-click{" "}
-          <code className="text-xs">ets2-tracker.exe</code>. Keep the console
-          window open while you drive — it forwards telemetry in the background.
+          Create the folder{" "}
+          <code className="text-xs">%USERPROFILE%\.ets2-tracker\</code> and drop
+          both the <code className="text-xs">ets2-tracker.exe</code> and a{" "}
+          <code className="text-xs">config.json</code> file (use the snippet
+          below) into it.
+        </li>
+        <li>
+          In Steam, right-click{" "}
+          <span className="font-semibold">Euro Truck Simulator 2</span> →{" "}
+          <span className="font-semibold">Properties</span> →{" "}
+          <span className="font-semibold">General</span> →{" "}
+          <span className="font-semibold">Launch Options</span> and paste (replace{" "}
+          <code className="text-xs">&lt;your-username&gt;</code> with your
+          Windows account name):
+          <pre className="mt-2 rounded border border-edge bg-ink px-3 py-2 text-xs font-mono overflow-x-auto whitespace-pre-wrap">
+{`"C:\\Users\\<your-username>\\.ets2-tracker\\ets2-tracker.exe" %command% -developer -console`}
+          </pre>
+          Steam launches the agent and the game together every time you hit{" "}
+          <span className="font-semibold">Play</span>. The{" "}
+          <code className="text-xs">-developer -console</code> flags also open
+          the in-game dev console so you can verify the plugin loaded.
         </li>
       </ol>
 
