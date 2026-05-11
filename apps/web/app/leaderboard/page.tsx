@@ -12,25 +12,16 @@ interface TotalRow {
   total_km: number;
 }
 
-interface LatestOdoRow {
-  user_id: string;
-  odometer_km: number;
-}
-
 export default async function Leaderboard() {
   const supabase = await supabaseServer();
 
-  const [{ data: users }, { data: totals }, { data: latest }] = await Promise.all([
+  const [{ data: users }, { data: totals }] = await Promise.all([
     supabase.from("users").select("id, name, display_name"),
     supabase.rpc("driver_totals_14d"),
-    supabase.rpc("driver_latest_odo"),
   ]);
 
   const totalsByUser = new Map<string, number>(
     ((totals ?? []) as TotalRow[]).map((r) => [r.user_id, Number(r.total_km ?? 0)]),
-  );
-  const initialOdometer: Record<string, number> = Object.fromEntries(
-    ((latest ?? []) as LatestOdoRow[]).map((r) => [r.user_id, Number(r.odometer_km ?? 0)]),
   );
 
   const initial: LeaderboardRow[] = ((users ?? []) as UserRow[])
@@ -40,7 +31,7 @@ export default async function Leaderboard() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Leaderboard · last 14 days</h1>
-      <LeaderboardLive initial={initial} initialOdometer={initialOdometer} />
+      <LeaderboardLive initial={initial} />
     </div>
   );
 }

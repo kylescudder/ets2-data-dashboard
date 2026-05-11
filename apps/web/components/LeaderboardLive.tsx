@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "../lib/supabase/client";
 
 export interface LeaderboardRow {
@@ -11,23 +11,16 @@ export interface LeaderboardRow {
   totalKm: number;
 }
 
-interface TelemetryInsert {
+interface TotalRow {
   user_id: string;
-  odometer_km: number;
+  total_km: number;
 }
 
-export function LeaderboardLive({
-  initial,
-  initialOdometer,
-}: {
-  initial: LeaderboardRow[];
-  initialOdometer: Record<string, number>;
-}) {
+const POLL_INTERVAL_MS = 3_000;
+
+export function LeaderboardLive({ initial }: { initial: LeaderboardRow[] }) {
   const [byUser, setByUser] = useState<Record<string, number>>(() =>
     Object.fromEntries(initial.map((r) => [r.id, r.totalKm])),
-  );
-  const lastOdoRef = useRef<Map<string, number>>(
-    new Map(Object.entries(initialOdometer)),
   );
 
   const meta = useMemo(
@@ -35,43 +28,52 @@ export function LeaderboardLive({
     [initial],
   );
 
+  // Tried WS-delta accumulation first — too fragile (backgrounded tabs,
+  // reconnects, brief Realtime hiccups silently dropped events, the running
+  // total drifted away from reality). For a friends-scale leaderboard the
+  // RPC is dirt cheap; poll it on a short interval and totals are always
+  // ground truth.
   useEffect(() => {
     const supabase = supabaseBrowser();
-    const channel = supabase
-      .channel("leaderboard-stream")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "telemetry" },
-        (payload) => {
-          const row = payload.new as TelemetryInsert;
-          if (!row?.user_id || typeof row.odometer_km !== "number") return;
-          const last = lastOdoRef.current.get(row.user_id);
-          lastOdoRef.current.set(row.user_id, row.odometer_km);
-          if (last == null) return; // first sample after load — establish baseline only
-          const delta = row.odometer_km - last;
-          if (delta <= 0) return; // odometer reset / out-of-order; skip
-          setByUser((prev) => ({
-            ...prev,
-            [row.user_id]: (prev[row.user_id] ?? 0) + delta,
-          }));
-        },
-      )
-      .subscribe();
+    let cancelled = false;
+
+    async function refresh() {
+      const { data } = await supabase.rpc("driver_totals_14d");
+      if (cancelled || !data) return;
+      setByUser((prev) => {
+        const next: Record<string, number> = { ...prev };
+        for (const r of data as TotalRow[]) {
+          next[r.user_id] = Number(r.total_km ?? 0);
+        }
+        return next;
+      });
+    }
+
+    const interval = setInterval(refresh, POLL_INTERVAL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
-  const rows = useMemo(() => {
-    return Array.from(meta.entries())
-      .map(([id, m]) => ({
-        id,
-        name: m.name,
-        display_name: m.display_name,
-        totalKm: byUser[id] ?? 0,
-      }))
-      .sort((a, b) => b.totalKm - a.totalKm);
-  }, [meta, byUser]);
+  const rows = useMemo(
+    () =>
+      Array.from(meta.entries())
+        .map(([id, m]) => ({
+          id,
+          name: m.name,
+          display_name: m.display_name,
+          totalKm: byUser[id] ?? 0,
+        }))
+        .sort((a, b) => b.totalKm - a.totalKm),
+    [meta, byUser],
+  );
 
   return (
     <div className="rounded-lg border border-edge bg-panel overflow-hidden">
@@ -93,7 +95,10 @@ export function LeaderboardLive({
                 </Link>
               </td>
               <td className="px-4 py-3 text-right font-mono">
-                {r.totalKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
+                {r.totalKm.toLocaleString(undefined, {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                })} km
               </td>
             </tr>
           ))}
