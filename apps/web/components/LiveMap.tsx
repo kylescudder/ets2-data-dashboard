@@ -6,6 +6,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useLiveDrivers, type DriverRow } from "../lib/useLiveDrivers";
 import { simToLatLon } from "../lib/projection";
+import { formatSpeed, useUnits } from "../lib/units";
 
 const TRAIL_MAX = 80;
 
@@ -30,6 +31,7 @@ function avatarIcon(d: DriverRow) {
 
 export function LiveMap() {
   const { drivers, connected } = useLiveDrivers();
+  const { units } = useUnits();
   const trailsRef = useRef<Map<string, [number, number][]>>(new Map());
   const [, bump] = useState(0);
 
@@ -86,7 +88,7 @@ export function LiveMap() {
                     {d.truck ? `${d.truck.make} ${d.truck.model}` : ""}
                   </div>
                   <div style={{ marginTop: 4, fontSize: 13 }}>
-                    {Math.round(sample.speedKph)} km/h · gear {sample.gear}
+                    {formatSpeed(sample.speedKph, units)} · gear {sample.gear}
                   </div>
                   {d.job ? (
                     <div style={{ marginTop: 4, fontSize: 12 }}>

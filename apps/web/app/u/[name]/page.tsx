@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "../../../lib/supabase/server";
 import { RecentTelemetryTable, type RecentRow } from "../../../components/RecentTelemetryTable";
+import { Distance } from "../../../components/Distance";
 
 interface HistoryRow {
   bucket: string;
@@ -54,8 +55,7 @@ export default async function DriverPage({
         <h2 className="text-sm uppercase tracking-wide text-slate-500 mb-3">Last 14 days</h2>
         <div className="rounded-lg border border-edge bg-panel p-5">
           <div className="text-3xl font-mono">
-            {totalKm.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-            <span className="text-base text-slate-400 ml-2">km</span>
+            <Distance km={totalKm} />
           </div>
           <div className="mt-4 grid grid-cols-7 gap-1">
             {historyRows.slice(-14).map((r) => {

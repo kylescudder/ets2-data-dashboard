@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "../lib/supabase/client";
+import { formatDistance, useUnits } from "../lib/units";
 
 export interface LeaderboardRow {
   id: string;
@@ -19,6 +20,7 @@ interface TotalRow {
 const POLL_INTERVAL_MS = 3_000;
 
 export function LeaderboardLive({ initial }: { initial: LeaderboardRow[] }) {
+  const { units } = useUnits();
   const [byUser, setByUser] = useState<Record<string, number>>(() =>
     Object.fromEntries(initial.map((r) => [r.id, r.totalKm])),
   );
@@ -95,10 +97,7 @@ export function LeaderboardLive({ initial }: { initial: LeaderboardRow[] }) {
                 </Link>
               </td>
               <td className="px-4 py-3 text-right font-mono">
-                {r.totalKm.toLocaleString(undefined, {
-                  minimumFractionDigits: 1,
-                  maximumFractionDigits: 1,
-                })} km
+                {formatDistance(r.totalKm, units, 1)}
               </td>
             </tr>
           ))}

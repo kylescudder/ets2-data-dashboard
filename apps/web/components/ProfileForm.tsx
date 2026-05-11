@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "../lib/supabase/client";
+import { useUnits, type UnitSystem } from "../lib/units";
 
 interface Profile {
   id: string;
@@ -15,6 +16,7 @@ const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 
 export function ProfileForm({ initial }: { initial: Profile }) {
   const router = useRouter();
+  const { units, setUnits } = useUnits();
   const [displayName, setDisplayName] = useState(initial.display_name);
   const [slug, setSlug] = useState(initial.name);
   const [busy, setBusy] = useState(false);
@@ -60,6 +62,7 @@ export function ProfileForm({ initial }: { initial: Profile }) {
   }
 
   return (
+    <>
     <form
       onSubmit={onSubmit}
       className="max-w-lg rounded-lg border border-edge bg-panel p-6 space-y-4"
@@ -107,5 +110,43 @@ export function ProfileForm({ initial }: { initial: Profile }) {
         {busy ? "Saving…" : "Save"}
       </button>
     </form>
+
+    <section className="max-w-lg rounded-lg border border-edge bg-panel p-6 space-y-3 mt-6">
+      <div>
+        <h2 className="text-lg font-bold">Units</h2>
+        <p className="text-xs text-slate-500 mt-1">
+          How speed and distance are shown across the dashboard. Saved on this
+          device — set it once per browser.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {(["metric", "imperial"] as UnitSystem[]).map((u) => (
+          <label
+            key={u}
+            className={`flex flex-col items-start gap-1 rounded border px-3 py-2 cursor-pointer ${
+              units === u
+                ? "border-accent bg-accent/10"
+                : "border-edge bg-ink hover:border-slate-500"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="units"
+                value={u}
+                checked={units === u}
+                onChange={() => setUnits(u)}
+                className="accent-accent"
+              />
+              <span className="font-semibold capitalize">{u}</span>
+            </div>
+            <span className="text-xs text-slate-500">
+              {u === "metric" ? "km/h · km" : "mph · mi"}
+            </span>
+          </label>
+        ))}
+      </div>
+    </section>
+    </>
   );
 }

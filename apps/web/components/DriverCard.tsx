@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import type { DriverRow } from "../lib/useLiveDrivers";
+import { formatSpeed, useUnits } from "../lib/units";
 
 function fmt(n: number | undefined, digits = 0) {
   if (n === undefined || n === null) return "—";
@@ -10,6 +13,7 @@ function fmt(n: number | undefined, digits = 0) {
 }
 
 export function DriverCard({ d }: { d: DriverRow }) {
+  const { units } = useUnits();
   const sample = d.latest;
   const fuelPct =
     sample && d.fuelCapacityLitres
@@ -43,7 +47,7 @@ export function DriverCard({ d }: { d: DriverRow }) {
       </div>
 
       <div className="grid grid-cols-3 gap-3 text-center mb-4">
-        <Metric label="Speed" value={`${fmt(sample?.speedKph, 0)}`} unit="km/h" />
+        <Metric label="Speed" value={formatSpeed(sample?.speedKph, units)} unit="" />
         <Metric label="RPM" value={`${fmt(sample?.rpm, 0)}`} unit="" />
         <Metric label="Gear" value={`${sample?.gear ?? "—"}`} unit="" />
       </div>

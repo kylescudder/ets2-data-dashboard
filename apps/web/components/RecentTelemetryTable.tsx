@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "../lib/supabase/client";
+import { formatDistance, formatSpeed, useUnits } from "../lib/units";
 
 interface JobInfo {
   cargo: string;
@@ -35,6 +36,7 @@ export function RecentTelemetryTable({
   userId: string;
   initial: RecentRow[];
 }) {
+  const { units } = useUnits();
   const [rows, setRows] = useState<RecentRow[]>(initial);
   const jobCache = useRef<Map<string, JobInfo>>(
     new Map(
@@ -109,10 +111,10 @@ export function RecentTelemetryTable({
             <td className="px-4 py-2 font-mono text-xs">
               {new Date(r.time).toLocaleString()}
             </td>
-            <td className="px-4 py-2 text-right font-mono">{Math.round(r.speed_kph)} km/h</td>
+            <td className="px-4 py-2 text-right font-mono">{formatSpeed(r.speed_kph, units)}</td>
             <td className="px-4 py-2 text-right font-mono">{Math.round(r.fuel_litres)} L</td>
             <td className="px-4 py-2 text-right font-mono">
-              {Math.round(r.odometer_km).toLocaleString()} km
+              {formatDistance(r.odometer_km, units)}
             </td>
             <td className="px-4 py-2 text-slate-400">
               {r.jobs?.source_city && r.jobs?.destination_city
