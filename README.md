@@ -7,15 +7,15 @@ can see what your friends are hauling.
 ## Architecture
 
 ```
-apps/client     telemetry agent (Windows/Linux), reads scs-sdk-plugin shared memory
+apps/client     Windows telemetry agent, reads scs-sdk-plugin shared memory
 apps/api        Fastify + Postgres/Timescale + WebSocket fan-out
 apps/web        Next.js dashboard (live cards, per-driver history, leaderboard)
 packages/shared Zod schemas / TS types shared by all three
 ```
 
-The `apps/client` is a stub for now. Live data is produced by a built-in
-**simulator** that POSTs to the same `/api/ingest` endpoint the real client
-will use, so you can build out the DB and frontend without hooking ETS2 up.
+The simulator under `apps/api` (`bun run simulate`) POSTs to the same
+`/api/ingest` endpoint the real client uses, so the DB and dashboard can be
+developed without the game running.
 
 ## Quick start
 
@@ -60,11 +60,26 @@ Demo keys: `demo-key-mike`, `demo-key-sarah`, `demo-key-tom`, `demo-key-lena`,
 `telemetry` keeps the raw stream for live + recent views; long-term dashboards
 use `time_bucket` rollups (see `/api/drivers/:name/history`).
 
-## Real client (later)
+## Real client (Windows)
 
-`apps/client` will read the `Local\SCSTelemetry` shared memory block exposed by
-[scs-sdk-plugin](https://github.com/RenCloud/scs-sdk-plugin). Same memory
-layout on Windows and Linux; only the OS shared-memory call differs. On Linux
-ETS2 runs under Proton/Wine - the plugin lives in the Wine prefix, so the
-client either runs in the same prefix or talks to a tiny Wine-side bridge.
+`apps/client` reads the `Local\SCSTelemetry` shared memory block exposed by
+[scs-sdk-plugin](https://github.com/RenCloud/scs-sdk-plugin). Windows-only;
+Linux/Proton is not supported.
+
+1. Install scs-sdk-plugin into the ETS2/ATS `bin/win_x64/plugins/` folder.
+2. Sign in to the dashboard, open `/profile`, and copy the **config.json
+   snippet** from the *Agent setup* panel into `%USERPROFILE%\.ets2-tracker\config.json`.
+   It looks like:
+   ```json
+   {
+     "ingestUrl": "http://127.0.0.1:54321/functions/v1/ingest",
+     "apiKey": "<48 hex chars from your profile>"
+   }
+   ```
+   (For the Fastify backend instead of Supabase, use
+   `http://localhost:4000/api/ingest`.)
+3. Start the game, then `bun dev:client`. The agent samples at 10 Hz, batches
+   every second, and POSTs to `ingestUrl` with `Authorization: Bearer <apiKey>`.
+   Failed batches are persisted under `%USERPROFILE%\.ets2-tracker\pending\`
+   and replayed on reconnect.
 ```
