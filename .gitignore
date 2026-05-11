@@ -14,3 +14,9 @@ supabase/.branches/
 supabase/.temp/
 supabase/snippets/
 *.tsbuildinfo
+
+# Self-host runtime state — these scripts run on the prod box and may write
+# generated .env files / per-project directories into the repo if executed in
+# place. Never commit them; they hold prod secrets.
+deploy/projects/
+deploy/secrets/

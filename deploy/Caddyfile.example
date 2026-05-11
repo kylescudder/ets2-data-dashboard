@@ -1,0 +1,56 @@
+# Place this at /etc/caddy/Caddyfile on the box. Reload after edits with:
+#   sudo caddy reload --config /etc/caddy/Caddyfile
+#
+# Caddy issues + auto-renews Let's Encrypt certs for every domain listed below.
+# Make sure each domain's A record points at this box before adding it here —
+# Let's Encrypt's HTTP-01 challenge will fail otherwise and you'll be rate
+# limited for ~an hour.
+
+# Global options
+{
+    email you@example.com     # used for ACME registration + expiry notifications
+}
+
+# ---------------------------------------------------------------------------
+# Per-project stanzas. Each project's Kong port comes from new-project.sh.
+# Add a block per project; reload Caddy after every edit.
+# ---------------------------------------------------------------------------
+
+api.ets2.kyle.dev {
+    reverse_proxy 127.0.0.1:8001
+    encode zstd gzip
+}
+
+api.app2.kyle.dev {
+    reverse_proxy 127.0.0.1:8002
+    encode zstd gzip
+}
+
+api.app3.kyle.dev {
+    reverse_proxy 127.0.0.1:8003
+    encode zstd gzip
+}
+
+# Studio admin UIs — restrict to your IP or behind basic auth. Studio has its
+# own DASHBOARD_USERNAME/DASHBOARD_PASSWORD but defence in depth is cheap.
+studio.kyle.dev {
+    # Uncomment to limit Studio access to a single source IP.
+    # @notme not remote_ip 1.2.3.4/32
+    # respond @notme 403
+
+    handle /ets2/* {
+        uri strip_prefix /ets2
+        reverse_proxy 127.0.0.1:8002    # Studio port = base_port + 1
+    }
+    handle /app2/* {
+        uri strip_prefix /app2
+        reverse_proxy 127.0.0.1:8003
+    }
+    handle /app3/* {
+        uri strip_prefix /app3
+        reverse_proxy 127.0.0.1:8004
+    }
+    handle {
+        respond "supabase studio router" 200
+    }
+}
