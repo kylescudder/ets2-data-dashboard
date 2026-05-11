@@ -103,11 +103,19 @@ export function useLiveDrivers() {
     const supabase = supabaseBrowser();
     let cancelled = false;
 
-    function scheduleOffline(userId: string, time: string) {
+    // `time` is the sample's recordedAt — used for initial load where we
+    // want to expire stale recent telemetry quickly. For live WS arrivals
+    // pass `null` instead: the row was *just inserted*, so reset the full
+    // TTL regardless of how old the recordedAt is (matters for buffered
+    // retries replaying old timestamps).
+    function scheduleOffline(userId: string, time: string | null) {
       const existing = offlineTimers.current.get(userId);
       if (existing) clearTimeout(existing);
-      const elapsed = Date.now() - new Date(time).getTime();
-      const ttl = Math.max(0, ONLINE_TTL_MS - elapsed);
+      let ttl = ONLINE_TTL_MS;
+      if (time) {
+        const elapsed = Date.now() - new Date(time).getTime();
+        ttl = Math.max(0, ONLINE_TTL_MS - elapsed);
+      }
       const t = setTimeout(() => {
         setDrivers((prev) =>
           prev.map((d) =>
@@ -243,7 +251,7 @@ export function useLiveDrivers() {
                 : d,
             ),
           );
-          scheduleOffline(row.user_id, row.time);
+          scheduleOffline(row.user_id, null);
         },
       )
       .subscribe((status) => setConnected(status === "SUBSCRIBED"));
