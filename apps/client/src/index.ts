@@ -35,7 +35,11 @@ let warnedNotRunning = false;
 // to), spawn the game as a child process, keep sampling in parallel, and exit
 // when the game exits. With no args we run as a standalone agent — same as
 // double-clicking the .exe.
-const launchArgs = process.argv.slice(1);
+//
+// slice(2) because compiled bun binaries follow Node's argv layout:
+// argv[0] = exe path, argv[1] = embedded script path (e.g. B:/~BUN/root/…),
+// argv[2+] = user-provided args.
+const launchArgs = process.argv.slice(2);
 if (launchArgs.length >= 1 && /\.exe$/i.test(launchArgs[0])) {
   const [gameCmd, ...gameArgs] = launchArgs;
   console.log(`launcher mode: ${gameCmd} ${gameArgs.join(" ")}`);
