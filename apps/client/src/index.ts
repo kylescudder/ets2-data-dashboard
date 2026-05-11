@@ -5,7 +5,10 @@ import { BatchBuffer, type PendingBatch } from "./buffer.js";
 import { openTelemetryMap, type TelemetryMap } from "./win-shm.js";
 import { decodeSample, decodeStatic } from "./scs-layout.js";
 
-const SAMPLE_INTERVAL_MS = 100;
+// Sample at 1 Hz. 10 Hz was overkill — the map is plenty smooth at 1 Hz,
+// the leaderboard polls every 3 s anyway, and dropping to 1 Hz cuts the
+// telemetry table size 10× (a 30-min trip drops from ~12 MB to ~1.2 MB).
+const SAMPLE_INTERVAL_MS = 1000;
 const FLUSH_INTERVAL_MS = 1000;
 
 if (process.platform !== "win32") {
