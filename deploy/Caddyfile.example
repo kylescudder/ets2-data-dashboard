@@ -8,7 +8,7 @@
 
 # Global options
 {
-    email kyle.scudder@crimsontide.co.uk     # used for ACME registration + expiry notifications
+    email kyle@kylescudder.co.uk     # used for ACME registration + expiry notifications
 }
 
 # ---------------------------------------------------------------------------
