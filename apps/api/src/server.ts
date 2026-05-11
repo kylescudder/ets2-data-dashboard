@@ -1,19 +1,52 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
+import cookie from "@fastify/cookie";
 import { IngestPayload, type LiveDriver, type WsServerMessage } from "@ets2/shared";
 import { query } from "./db.js";
 import { bus } from "./bus.js";
+import {
+  DASHBOARD_PASSWORD,
+  WEB_ORIGIN,
+  checkSecretsAtBoot,
+  clearSessionCookie,
+  ingestKey,
+  isAuthorized,
+  requireAuth,
+  setSessionCookie,
+} from "./auth.js";
 
 const PORT = Number(process.env.API_PORT ?? 4000);
 
 const app = Fastify({ logger: { level: "info" } });
-await app.register(cors, { origin: true });
+checkSecretsAtBoot(app.log);
+
+await app.register(cookie);
+await app.register(cors, { origin: WEB_ORIGIN, credentials: true });
 await app.register(websocket);
 
 app.get("/health", async () => ({ ok: true }));
 
-app.get("/api/drivers", async () => {
+app.post("/api/login", async (req, reply) => {
+  const body = req.body as { password?: unknown } | undefined;
+  if (!body || typeof body.password !== "string" || body.password !== DASHBOARD_PASSWORD) {
+    return reply.code(401).send({ error: "wrong password" });
+  }
+  setSessionCookie(reply);
+  return { ok: true };
+});
+
+app.post("/api/logout", async (_req, reply) => {
+  clearSessionCookie(reply);
+  return { ok: true };
+});
+
+app.get("/api/me", async (req, reply) => {
+  if (!isAuthorized(req)) return reply.code(401).send({ error: "unauthorized" });
+  return { ok: true };
+});
+
+app.get("/api/drivers", { preHandler: requireAuth }, async () => {
   const { rows } = await query<{
     id: string;
     name: string;
@@ -43,7 +76,7 @@ const dayBucketExpr = hasTimescale
   ? `time_bucket('1 day', t.time)`
   : `date_trunc('day', t.time)`;
 
-app.get("/api/drivers/:name/history", async (req) => {
+app.get("/api/drivers/:name/history", { preHandler: requireAuth }, async (req) => {
   const { name } = req.params as { name: string };
   const { rows } = await query<{
     bucket: string;
@@ -63,7 +96,7 @@ app.get("/api/drivers/:name/history", async (req) => {
   return rows;
 });
 
-app.get("/api/drivers/:name/recent", async (req) => {
+app.get("/api/drivers/:name/recent", { preHandler: requireAuth }, async (req) => {
   const { name } = req.params as { name: string };
   const { rows } = await query(
     `SELECT t.time, t.speed_kph, t.fuel_litres, t.odometer_km,
@@ -79,9 +112,12 @@ app.get("/api/drivers/:name/recent", async (req) => {
 });
 
 app.post("/api/ingest", async (req, reply) => {
+  const apiKey = ingestKey(req);
+  if (!apiKey) return reply.code(401).send({ error: "missing bearer token" });
+
   const parsed = IngestPayload.safeParse(req.body);
   if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-  const { apiKey, sessionId, truck, samples } = parsed.data;
+  const { sessionId, truck, samples } = parsed.data;
 
   const userRes = await query<{ id: string; name: string; display_name: string }>(
     `SELECT id, name, display_name FROM users WHERE api_key = $1`,
@@ -143,7 +179,7 @@ app.post("/api/ingest", async (req, reply) => {
 });
 
 app.register(async (f) => {
-  f.get("/ws", { websocket: true }, (socket) => {
+  f.get("/ws", { websocket: true, preHandler: requireAuth }, (socket) => {
     const snapshot: WsServerMessage = { type: "snapshot", drivers: bus.snapshot() };
     socket.send(JSON.stringify(snapshot));
     const onMessage = (msg: WsServerMessage) => socket.send(JSON.stringify(msg));

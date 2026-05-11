@@ -12,8 +12,8 @@
  *      apiKey from a local config file (~/.ets2-tracker/config.json).
  *   4. Buffer to disk if the API is unreachable; replay on reconnect.
  *
- * For now, the simulator in `apps/api` (`pnpm simulate`) drives the same /api/ingest
+ * For now, the simulator in `apps/api` (`bun run simulate`) drives the same /api/ingest
  * endpoint with synthetic data so the DB and dashboard can be developed in isolation.
  */
 console.log("ets2-client stub: see apps/client/src/index.ts for implementation plan");
-console.log("for now, run: pnpm simulate");
+console.log("for now, run: bun run simulate");

@@ -1,9 +1,58 @@
 import { randomUUID } from "node:crypto";
-import type { IngestPayload, TelemetrySample } from "@ets2/shared";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { TelemetrySample } from "@ets2/shared";
 import { CARGOS, CITIES, FIXTURE_USERS, type FixtureUser } from "./fixtures.js";
 
-const API_URL = process.env.API_URL ?? "http://localhost:4000";
+// `bun run --filter` loads .env from the invoking shell's cwd, not the
+// workspace's, so we eagerly read apps/api/.env (and fall back to the web
+// app's .env.local) ourselves.
+function loadEnv(path: string) {
+  try {
+    const content = readFileSync(path, "utf8");
+    for (const raw of content.split("\n")) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq < 0) continue;
+      const key = line.slice(0, eq).trim();
+      let val = line.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (!process.env[key]) process.env[key] = val;
+    }
+  } catch {
+    // file missing — silently skip; if both fallbacks miss we error below.
+  }
+}
+const here = dirname(fileURLToPath(import.meta.url));
+loadEnv(resolve(here, "../.env"));
+loadEnv(resolve(here, "../../web/.env.local"));
+
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ??
+  process.env.NEXT_PUBLIC_SUPABASE_URL ??
+  "http://127.0.0.1:54321";
+const ANON_KEY =
+  process.env.SUPABASE_ANON_KEY ??
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const TICK_MS = 1000;
+
+if (!ANON_KEY) {
+  console.error(
+    "Missing SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).",
+    "Get the publishable key from `supabase status -o env` and put it in",
+    "apps/api/.env or export it before running.",
+  );
+  process.exit(1);
+}
+
+const INGEST_URL = `${SUPABASE_URL}/functions/v1/ingest`;
 
 interface DriverState {
   user: FixtureUser;
@@ -80,6 +129,11 @@ function tick(s: DriverState) {
   s.truckDamage = Math.min(1, s.truckDamage + (Math.random() < 0.001 ? rand(0, 0.005) : 0));
 }
 
+function round(n: number, p: number) {
+  const f = 10 ** p;
+  return Math.round(n * f) / f;
+}
+
 function buildSample(s: DriverState): TelemetrySample {
   const heading = Math.atan2(s.dest.z - s.posZ, s.dest.x - s.posX);
   return {
@@ -104,26 +158,24 @@ function buildSample(s: DriverState): TelemetrySample {
   };
 }
 
-function round(n: number, p: number) {
-  const f = 10 ** p;
-  return Math.round(n * f) / f;
-}
-
 async function send(s: DriverState, sample: TelemetrySample) {
-  const payload: IngestPayload = {
-    apiKey: s.user.apiKey,
-    sessionId: s.sessionId,
-    truck: s.user.truck,
-    samples: [sample],
-  };
   try {
-    const res = await fetch(`${API_URL}/api/ingest`, {
+    const res = await fetch(INGEST_URL, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: {
+        "content-type": "application/json",
+        apikey: ANON_KEY!,
+        authorization: `Bearer ${s.user.apiKey}`,
+      },
+      body: JSON.stringify({
+        sessionId: s.sessionId,
+        truck: s.user.truck,
+        samples: [sample],
+      }),
     });
     if (!res.ok) {
-      console.error(`ingest failed for ${s.user.name}: ${res.status}`);
+      const text = await res.text().catch(() => "");
+      console.error(`ingest failed for ${s.user.name}: ${res.status} ${text}`);
     }
   } catch (err) {
     console.error(`ingest error for ${s.user.name}:`, (err as Error).message);
@@ -131,12 +183,15 @@ async function send(s: DriverState, sample: TelemetrySample) {
 }
 
 async function main() {
-  const onlineCount = Math.max(1, Math.min(FIXTURE_USERS.length, Number(process.env.SIM_DRIVERS ?? 4)));
+  const onlineCount = Math.max(
+    1,
+    Math.min(FIXTURE_USERS.length, Number(process.env.SIM_DRIVERS ?? 4)),
+  );
   const drivers: DriverState[] = FIXTURE_USERS.slice(0, onlineCount).map((u) =>
     newJob(u, rand(50_000, 250_000)),
   );
 
-  console.log(`simulating ${drivers.length} drivers -> ${API_URL}`);
+  console.log(`simulating ${drivers.length} drivers -> ${INGEST_URL}`);
   for (const d of drivers) {
     console.log(`  ${d.user.displayName}: ${d.source.name} -> ${d.dest.name} (${d.cargo})`);
   }

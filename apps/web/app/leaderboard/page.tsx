@@ -1,64 +1,46 @@
-import { API_URL } from "../../lib/env";
-import Link from "next/link";
+import { supabaseServer } from "../../lib/supabase/server";
+import { LeaderboardLive, type LeaderboardRow } from "../../components/LeaderboardLive";
 
-interface DriverDto {
-  userId: string;
+interface UserRow {
+  id: string;
   name: string;
-  displayName: string;
+  display_name: string;
 }
 
-interface HistoryRow {
-  bucket: string;
-  avg_speed: number;
-  distance_km: number;
+interface TotalRow {
+  user_id: string;
+  total_km: number;
+}
+
+interface LatestOdoRow {
+  user_id: string;
+  odometer_km: number;
 }
 
 export default async function Leaderboard() {
-  const drivers: DriverDto[] = await fetch(`${API_URL}/api/drivers`, { cache: "no-store" }).then(
-    (r) => r.json(),
+  const supabase = await supabaseServer();
+
+  const [{ data: users }, { data: totals }, { data: latest }] = await Promise.all([
+    supabase.from("users").select("id, name, display_name"),
+    supabase.rpc("driver_totals_14d"),
+    supabase.rpc("driver_latest_odo"),
+  ]);
+
+  const totalsByUser = new Map<string, number>(
+    ((totals ?? []) as TotalRow[]).map((r) => [r.user_id, Number(r.total_km ?? 0)]),
+  );
+  const initialOdometer: Record<string, number> = Object.fromEntries(
+    ((latest ?? []) as LatestOdoRow[]).map((r) => [r.user_id, Number(r.odometer_km ?? 0)]),
   );
 
-  const rows = await Promise.all(
-    drivers.map(async (d) => {
-      const h: HistoryRow[] = await fetch(
-        `${API_URL}/api/drivers/${d.name}/history`,
-        { cache: "no-store" },
-      ).then((r) => r.json());
-      const totalKm = h.reduce((acc, r) => acc + Number(r.distance_km ?? 0), 0);
-      return { ...d, totalKm };
-    }),
-  );
-  rows.sort((a, b) => b.totalKm - a.totalKm);
+  const initial: LeaderboardRow[] = ((users ?? []) as UserRow[])
+    .map((u) => ({ ...u, totalKm: totalsByUser.get(u.id) ?? 0 }))
+    .sort((a, b) => b.totalKm - a.totalKm);
 
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Leaderboard · last 14 days</h1>
-      <div className="rounded-lg border border-edge bg-panel overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-edge/40 text-slate-400 text-xs uppercase">
-            <tr>
-              <th className="text-left px-4 py-2 w-10">#</th>
-              <th className="text-left px-4 py-2">Driver</th>
-              <th className="text-right px-4 py-2">Distance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={r.userId} className="border-t border-edge">
-                <td className="px-4 py-3 font-mono text-slate-500">{i + 1}</td>
-                <td className="px-4 py-3">
-                  <Link href={`/u/${r.name}`} className="hover:text-accent">
-                    {r.displayName}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-right font-mono">
-                  {r.totalKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <LeaderboardLive initial={initial} initialOdometer={initialOdometer} />
     </div>
   );
 }

@@ -30,7 +30,6 @@ export const TelemetrySample = z.object({
 export type TelemetrySample = z.infer<typeof TelemetrySample>;
 
 export const IngestPayload = z.object({
-  apiKey: z.string().min(8),
   sessionId: z.string().uuid(),
   truck: z.object({
     make: z.string(),

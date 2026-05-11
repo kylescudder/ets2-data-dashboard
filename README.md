@@ -21,24 +21,24 @@ will use, so you can build out the DB and frontend without hooking ETS2 up.
 
 ```bash
 # 1. install
-pnpm install
+bun install
 
 # 2. start postgres+timescale
-pnpm db:up
+bun run db:up
 
 # 3. run migrations + seed (5 drivers, 7 days of fake history)
-pnpm db:migrate
-pnpm db:seed
+bun run db:migrate
+bun run db:seed
 
 # 4. start the API (terminal A)
-pnpm dev:api
+bun run dev:api
 
 # 5. start the web dashboard (terminal B)
-pnpm dev:web
+bun run dev:web
 # -> http://localhost:3000
 
 # 6. start the live simulator (terminal C)
-pnpm simulate
+bun run simulate
 ```
 
 You should see 4 drivers driving across Europe in real time, with cards updating
