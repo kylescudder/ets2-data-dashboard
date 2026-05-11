@@ -1,0 +1,55 @@
+# Place this at /etc/caddy/Caddyfile on the box. Reload after edits with:
+#   sudo caddy reload --config /etc/caddy/Caddyfile
+#
+# Caddy issues + auto-renews Let's Encrypt certs for every domain listed below.
+# Make sure each domain's A record points at this box before adding it here —
+# Let's Encrypt's HTTP-01 challenge will fail otherwise and you'll be rate
+# limited for ~an hour.
+
+# Global options
+{
+    email kyle.scudder@crimsontide.co.uk     # used for ACME registration + expiry notifications
+}
+
+# ---------------------------------------------------------------------------
+# Per-project stanzas. Each project's Kong port comes from new-project.sh.
+# Add a block per project; reload Caddy after every edit.
+# ---------------------------------------------------------------------------
+
+# ETS2 friends tracker — Supabase API
+api.ets2.kylescudder.co.uk {
+    reverse_proxy 127.0.0.1:8001
+    encode zstd gzip
+}
+
+# Deadwax Club iOS app — Supabase API
+api.deadwaxclub.app {
+    reverse_proxy 127.0.0.1:8011
+    encode zstd gzip
+}
+
+# Third hobby project — fill in the real domain when you pick one
+# api.<project>.kylescudder.co.uk {
+#     reverse_proxy 127.0.0.1:8021
+#     encode zstd gzip
+# }
+
+# Studio admin UIs — multi-tenant router under one hostname. Restrict to your
+# source IP or wrap with basic auth in addition to Studio's own login.
+studio.kylescudder.co.uk {
+    # Uncomment + paste your office/home IP to lock Studio down.
+    # @notme not remote_ip 1.2.3.4/32
+    # respond @notme 403
+
+    handle /ets2/* {
+        uri strip_prefix /ets2
+        reverse_proxy 127.0.0.1:8002      # ETS2 Studio = Kong port + 1
+    }
+    handle /deadwax/* {
+        uri strip_prefix /deadwax
+        reverse_proxy 127.0.0.1:8012      # Deadwax Studio = Kong port + 1
+    }
+    handle {
+        respond "supabase studio router — use /ets2 or /deadwax" 200
+    }
+}
