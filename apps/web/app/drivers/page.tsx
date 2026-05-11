@@ -19,7 +19,7 @@ export default function Page() {
 
       {online.length === 0 && (
         <div className="text-slate-400 mb-8">
-          No-one online. Run <code className="text-accent">bun run simulate</code> to populate live data.
+          No-one online right now.
         </div>
       )}
 

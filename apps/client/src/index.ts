@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { IngestPayload, TelemetrySample } from "@ets2/shared";
+import type { ActiveJob, IngestPayload, TelemetrySample, Truck } from "@ets2/shared";
 import { loadConfig } from "./config.js";
 import { BatchBuffer, type PendingBatch } from "./buffer.js";
 import { openTelemetryMap, type TelemetryMap } from "./win-shm.js";
-import { decodeSample, decodeStatic } from "./scs-layout.js";
+import { decodeJob, decodeSample, decodeStatic } from "./scs-layout.js";
 
 // Sample at 1 Hz. 10 Hz was overkill — the map is plenty smooth at 1 Hz,
 // the leaderboard polls every 3 s anyway, and dropping to 1 Hz cuts the
@@ -22,7 +22,10 @@ const sessionId = randomUUID();
 
 let map: TelemetryMap | null = null;
 let samples: TelemetrySample[] = [];
-let lastTruck: { make: string; model: string } | null = null;
+// Captured per-batch at flush time. Truck stays roughly constant for a
+// session; job changes when the driver picks one up / completes one.
+let lastTruck: Truck | null = null;
+let lastJob: ActiveJob | null = null;
 let warnedNotRunning = false;
 
 function tryOpenMap(): boolean {
@@ -59,6 +62,7 @@ function sample() {
   const stat = decodeStatic(buf);
   if (!stat.sdkActive || stat.paused) return;
   lastTruck = stat.truck;
+  lastJob = decodeJob(buf);
   samples.push(decodeSample(buf, new Date().toISOString()));
 }
 
@@ -97,6 +101,7 @@ async function flush() {
   const payload: IngestPayload = {
     sessionId,
     truck: lastTruck,
+    job: lastJob,
     samples: batch,
   };
   const pending: PendingBatch = { apiKey: config.apiKey, payload };
@@ -111,7 +116,7 @@ process.on("SIGINT", () => {
   if (samples.length && lastTruck) {
     buffer.persist({
       apiKey: config.apiKey,
-      payload: { sessionId, truck: lastTruck, samples },
+      payload: { sessionId, truck: lastTruck, job: lastJob, samples },
     });
   }
   map?.close();

@@ -29,7 +29,7 @@ export default async function DriverPage({
     supabase
       .from("telemetry")
       .select(
-        "time, speed_kph, fuel_litres, odometer_km, job_cargo, job_source, job_destination",
+        "time, speed_kph, fuel_litres, odometer_km, job_id, jobs ( cargo, source_city, destination_city )",
       )
       .eq("user_id", user.id)
       .order("time", { ascending: false })
@@ -37,7 +37,9 @@ export default async function DriverPage({
   ]);
 
   const historyRows = (history ?? []) as HistoryRow[];
-  const recentRows = (recent ?? []) as RecentRow[];
+  // PostgREST returns embedded many-to-one as a single object at runtime,
+  // but supabase-js types it as an array. Cast via unknown.
+  const recentRows = (recent ?? []) as unknown as RecentRow[];
   const totalKm = historyRows.reduce(
     (acc, r) => acc + Number(r.distance_km ?? 0),
     0,

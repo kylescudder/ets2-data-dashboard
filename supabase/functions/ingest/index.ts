@@ -1,11 +1,11 @@
 // Telemetry ingest endpoint. Called by clients (real ETS2 agent or local
 // simulator) with `Authorization: Bearer <users.api_key>`. Validates the
-// payload, looks up the user by api_key (service role bypasses RLS), upserts
-// the session, and bulk-inserts telemetry rows. Realtime broadcasts the
-// inserts to subscribed dashboards.
+// payload, normalises truck → vehicles, job → jobs, and bulk-inserts
+// telemetry rows linked to both. Realtime broadcasts the inserts to
+// subscribed dashboards.
 //
-// `verify_jwt = false` is set in supabase/config.toml because the Authorization
-// header carries our own opaque api_key, not a Supabase JWT.
+// `verify_jwt = false` is set in supabase/config.toml because the
+// Authorization header carries our own opaque api_key, not a Supabase JWT.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -16,31 +16,33 @@ const TelemetrySample = z.object({
   rpm: z.number(),
   gear: z.number().int(),
   fuelLitres: z.number(),
-  fuelCapacityLitres: z.number(),
   odometerKm: z.number(),
   truckDamage: z.number().min(0).max(1),
   cargoDamage: z.number().min(0).max(1),
   position: z.object({
     x: z.number(),
-    y: z.number(),
     z: z.number(),
     heading: z.number(),
   }),
-  job: z
-    .object({
-      cargo: z.string(),
-      sourceCity: z.string(),
-      destinationCity: z.string(),
-      remainingKm: z.number(),
-      deliveryDeadline: z.string().nullable(),
-      income: z.number(),
-    })
-    .nullable(),
+});
+
+const ActiveJob = z.object({
+  cargo: z.string(),
+  sourceCity: z.string(),
+  destinationCity: z.string(),
+  income: z.number(),
+});
+
+const Truck = z.object({
+  make: z.string(),
+  model: z.string(),
+  fuelCapacityLitres: z.number().optional(),
 });
 
 const IngestPayload = z.object({
   sessionId: z.string().uuid(),
-  truck: z.object({ make: z.string(), model: z.string() }),
+  truck: Truck,
+  job: ActiveJob.nullable().optional(),
   samples: z.array(TelemetrySample).min(1).max(200),
 });
 
@@ -62,6 +64,66 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "content-type": "application/json" },
   });
+}
+
+async function ensureVehicle(
+  userId: string,
+  make: string,
+  model: string,
+): Promise<string | null> {
+  // Upsert by (user_id, make, model) — schema has a UNIQUE constraint there.
+  const { data, error } = await supabase
+    .from("vehicles")
+    .upsert(
+      { user_id: userId, make, model },
+      { onConflict: "user_id,make,model" },
+    )
+    .select("id")
+    .single();
+  if (error) {
+    console.error("vehicle upsert error:", error);
+    return null;
+  }
+  return data.id;
+}
+
+async function ensureJob(
+  sessionId: string,
+  job: z.infer<typeof ActiveJob>,
+): Promise<string | null> {
+  // A job is identified within a session by (cargo, source_city,
+  // destination_city, income). Idempotent — same tuple, same job row.
+  const { data: existing, error: findErr } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("session_id", sessionId)
+    .eq("cargo", job.cargo)
+    .eq("source_city", job.sourceCity)
+    .eq("destination_city", job.destinationCity)
+    .eq("income", job.income)
+    .maybeSingle();
+  if (findErr) {
+    console.error("job find error:", findErr);
+    return null;
+  }
+  if (existing) return existing.id;
+
+  const { data: created, error: createErr } = await supabase
+    .from("jobs")
+    .insert({
+      session_id: sessionId,
+      cargo: job.cargo,
+      source_city: job.sourceCity,
+      destination_city: job.destinationCity,
+      income: job.income,
+    })
+    .select("id")
+    .single();
+  if (createErr) {
+    console.error("job insert error:", createErr);
+    return null;
+  }
+  return created.id;
 }
 
 Deno.serve(async (req) => {
@@ -90,7 +152,7 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     return json({ error: parsed.error.flatten() }, 400);
   }
-  const { sessionId, truck, samples } = parsed.data;
+  const { sessionId, truck, job, samples } = parsed.data;
 
   const { data: user, error: userErr } = await supabase
     .from("users")
@@ -103,12 +165,17 @@ Deno.serve(async (req) => {
   }
   if (!user) return json({ error: "unknown api key" }, 401);
 
+  const vehicleId = await ensureVehicle(user.id, truck.make, truck.model);
+  if (!vehicleId) return json({ error: "vehicle ensure failed" }, 500);
+
+  // Upsert session. ignoreDuplicates means later batches don't clobber the
+  // initially-recorded fuel_capacity_litres (it's stable per session anyway).
   const { error: sessionErr } = await supabase.from("sessions").upsert(
     {
       id: sessionId,
       user_id: user.id,
-      truck_make: truck.make,
-      truck_model: truck.model,
+      vehicle_id: vehicleId,
+      fuel_capacity_litres: truck.fuelCapacityLitres ?? null,
     },
     { onConflict: "id", ignoreDuplicates: true },
   );
@@ -117,27 +184,27 @@ Deno.serve(async (req) => {
     return json({ error: "session insert failed" }, 500);
   }
 
+  let jobId: string | null = null;
+  if (job) {
+    jobId = await ensureJob(sessionId, job);
+    if (!jobId) return json({ error: "job ensure failed" }, 500);
+  }
+
   const rows = samples.map((s) => ({
     time: s.recordedAt,
     session_id: sessionId,
     user_id: user.id,
+    job_id: jobId,
     speed_kph: s.speedKph,
     rpm: s.rpm,
     gear: s.gear,
     fuel_litres: s.fuelLitres,
-    fuel_capacity_l: s.fuelCapacityLitres,
     odometer_km: s.odometerKm,
     truck_damage: s.truckDamage,
     cargo_damage: s.cargoDamage,
     pos_x: s.position.x,
-    pos_y: s.position.y,
     pos_z: s.position.z,
     heading: s.position.heading,
-    job_cargo: s.job?.cargo ?? null,
-    job_source: s.job?.sourceCity ?? null,
-    job_destination: s.job?.destinationCity ?? null,
-    job_remaining_km: s.job?.remainingKm ?? null,
-    job_income: s.job?.income ?? null,
   }));
 
   const { error: telemetryErr } = await supabase.from("telemetry").insert(rows);
