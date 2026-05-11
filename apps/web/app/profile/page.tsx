@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { supabaseServer } from "../../lib/supabase/server";
 import { ProfileForm } from "../../components/ProfileForm";
 import { AgentSetup } from "../../components/AgentSetup";
+import { OnboardingBanner } from "../../components/OnboardingBanner";
 
 export default async function ProfilePage() {
   const supabase = await supabaseServer();
@@ -16,11 +17,21 @@ export default async function ProfilePage() {
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
+  let sessionCount = 0;
+  if (profile) {
+    const { count } = await supabase
+      .from("sessions")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", profile.id);
+    sessionCount = count ?? 0;
+  }
+
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Profile</h1>
       {profile ? (
         <>
+          {sessionCount === 0 && <OnboardingBanner />}
           <ProfileForm
             initial={{
               id: profile.id,

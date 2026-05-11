@@ -29,9 +29,27 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const supabase = await supabaseServer();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return redirect(`${origin}/`);
+      // First-time users (no driving sessions yet) get dropped on /profile so
+      // the onboarding banner + AgentSetup snippet are right in front of them.
+      // Returning users go to the live dashboard as before.
+      let destination = "/";
+      if (data?.user) {
+        const { data: profile } = await supabase
+          .from("users")
+          .select("id")
+          .eq("auth_user_id", data.user.id)
+          .maybeSingle();
+        if (profile) {
+          const { count } = await supabase
+            .from("sessions")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", profile.id);
+          if ((count ?? 0) === 0) destination = "/profile";
+        }
+      }
+      return redirect(`${origin}${destination}`);
     }
   }
 
