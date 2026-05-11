@@ -25,7 +25,7 @@ export function Nav() {
   return (
     <header className="border-b border-edge bg-panel">
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-6">
-        <Link href="/" className="font-bold text-accent text-lg">ETS2 Tracker</Link>
+        <Link href="/" className="font-bold text-accent text-base leading-tight">Euro Truck Simulator 2 Data Dashboard</Link>
         <nav className="flex gap-4 text-sm text-slate-300 flex-1">
           <Link href="/">Map</Link>
           <Link href="/drivers">Drivers</Link>

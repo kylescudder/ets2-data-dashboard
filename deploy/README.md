@@ -31,8 +31,9 @@ deploy/
 The actual Supabase docker-compose comes from the upstream repo at run time;
 we don't fork it. `new-project.sh` clones `supabase/supabase`, copies its
 `docker/` folder per project, generates secrets, drops a
-`docker-compose.override.yml` that wires our email template into GoTrue, and
-brings the stack up. Upgrades are then a matter of re-pulling the clone.
+`docker-compose.override.yml` that points GoTrue at the Caddy-served email
+templates, and brings the stack up. Upgrades are then a matter of re-pulling
+the clone.
 
 ## First-time box setup
 
@@ -172,8 +173,13 @@ The script:
 - copies `docker/` to `/opt/supabase/ets2/`
 - generates fresh secrets, allocates Kong (8001), pooler (8004/8005),
   Postgres external (8003)
-- installs the dark/amber `magic_link.html` template from `deploy/templates/`
-  and writes a `docker-compose.override.yml` that mounts it into GoTrue
+- installs the dark/amber email template under `volumes/auth/templates/`
+  (one copy per auth flow: magic_link, confirmation, recovery, invite,
+  email_change) and writes a `docker-compose.override.yml` pointing GoTrue
+  at the Caddy-served HTTPS URLs. **You must add the matching
+  `handle /auth-templates/*` block to your Caddyfile** — see
+  `Caddyfile.example`. GoTrue won't talk to plain `http://` upstreams or
+  file paths; the Caddy hop is the simplest workaround.
 - chowns `/opt/supabase/ets2/` to you so future `.env` edits don't need sudo
 - `docker compose up -d`
 - prints the anon/service keys
@@ -385,5 +391,12 @@ surfaces it for the telemetry agent.
   (Netlify); the API URL is the Supabase host Caddy fronts. The fourth arg
   to `new-project.sh` distinguishes them.
 - **Email template branding** lives in
-  `/opt/supabase/<project>/volumes/auth/templates/magic_link.html`. Edit
-  the header text, then `docker compose up -d auth`.
+  `/opt/supabase/<project>/volumes/auth/templates/*.html`. Caddy serves
+  them straight off disk, so edits take effect on the next email send —
+  no container restart needed. The `.hd` cell at the top of each file is
+  the project name; change it per project.
+- **`GOTRUE_MAILER_TEMPLATES_*` requires an HTTPS URL.** File paths get
+  treated as URL paths against `SITE_URL` (and Next.js's catchall serves
+  the login page as the email body, which is fun to discover the hard
+  way). That's why Caddy serves the templates at
+  `https://<api-domain>/auth-templates/*`.

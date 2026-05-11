@@ -149,23 +149,31 @@ set_env ENABLE_ANONYMOUS_USERS         "false"
 set_env JWT_EXPIRY                     "3600"
 set_env FUNCTIONS_VERIFY_JWT           "false"
 
-# 5. drop in the magic-link email template + a compose override that wires
-# GoTrue to use it. Customise volumes/auth/templates/magic_link.html per
-# project (edit the header text to your brand).
-echo "==> installing dark-themed magic-link email template"
+# 5. drop in the dark email template + a compose override that points GoTrue
+# at the Caddy-served HTTPS URLs. GoTrue's template loader requires HTTP(S)
+# URLs (file paths get treated as URL paths and rewritten against SITE_URL,
+# which fetches the wrong content). Caddy serves the files from
+# volumes/auth/templates/ at https://$DOMAIN/auth-templates/<name>.html —
+# add the matching `handle /auth-templates/*` block to your Caddyfile (see
+# deploy/Caddyfile.example).
+echo "==> installing dark-themed email templates"
 mkdir -p "$DEST/volumes/auth/templates"
-cp "$REPO_ROOT/deploy/templates/magic_link.html" "$DEST/volumes/auth/templates/magic_link.html"
+for t in magic_link confirmation recovery invite email_change; do
+  cp "$REPO_ROOT/deploy/templates/magic_link.html" "$DEST/volumes/auth/templates/$t.html"
+done
 chmod -R a+rX "$DEST/volumes/auth/templates"
 
 # Compose override — never edit the upstream docker-compose.yml so Supabase
 # upgrades don't clobber our customisation.
-cat > "$DEST/docker-compose.override.yml" <<'YML'
+cat > "$DEST/docker-compose.override.yml" <<YML
 services:
   auth:
-    volumes:
-      - ./volumes/auth/templates:/etc/gotrue/templates:ro
     environment:
-      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: /etc/gotrue/templates/magic_link.html
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK:   https://$DOMAIN/auth-templates/magic_link.html
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: https://$DOMAIN/auth-templates/confirmation.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY:     https://$DOMAIN/auth-templates/recovery.html
+      GOTRUE_MAILER_TEMPLATES_INVITE:       https://$DOMAIN/auth-templates/invite.html
+      GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: https://$DOMAIN/auth-templates/email_change.html
 YML
 
 # 6. chown the project dir back to the invoking user. Done BEFORE the stack
@@ -205,16 +213,21 @@ cat <<EOF
     SUPABASE_SERVICE_ROLE_KEY = $SERVICE_KEY
 
   Next steps:
-    1. Add a Caddy stanza pointing $DOMAIN at 127.0.0.1:$KONG_HTTP (and one
-       for studio.<project>.<your-domain> pointing at the same port). See
-       deploy/Caddyfile.example, then:  sudo systemctl reload caddy
+    1. Add Caddy stanzas for $DOMAIN and studio.<project>.<your-domain>.
+       The api.* stanza MUST include the /auth-templates/* file_server
+       block pointing at $DEST/volumes/auth/templates — GoTrue fetches the
+       email templates from that URL. See deploy/Caddyfile.example.
+       Then:  sudo caddy validate --config /etc/caddy/Caddyfile
+              sudo systemctl reload caddy
     2. Configure SMTP in $DEST/.env (SMTP_HOST, SMTP_USER, SMTP_PASS,
        SMTP_SENDER_NAME). SMTP_ADMIN_EMAIL is pre-filled with
        noreply@$APEX — change it if you'd prefer something else. After any
        .env edit, recreate the container (NOT restart):
          cd $DEST && docker compose up -d auth
-    3. Customise the email branding by editing the header text in
-       $DEST/volumes/auth/templates/magic_link.html, then recreate auth.
+    3. Customise the email branding by editing the header text (.hd cell)
+       in $DEST/volumes/auth/templates/magic_link.html (and copy across to
+       the other *.html siblings for the other auth flows). No restart
+       needed — Caddy serves them straight off disk.
     4. Apply your app's migrations:
          cd /opt/<your-repo>
          for f in supabase/migrations/*.sql; do

@@ -17,12 +17,21 @@
 #   api.<project>.<your-domain>     → Kong (API surface)
 #   studio.<project>.<your-domain>  → Kong (also serves Studio at /)
 #
-# Kong sits on KONG_HTTP_PORT (8001, 8011, … set by new-project.sh).
+# The api.* stanza also exposes a `/auth-templates/*` path that serves the
+# email-template HTML files for GoTrue. Templates are not sensitive (just
+# HTML with Go template placeholders), but it's a public URL — keep that
+# in mind if you edit the files.
+#
 # Add a pair per project; reload Caddy after every edit.
 # ---------------------------------------------------------------------------
 
 # ETS2 friends tracker
 api.ets2.kylescudder.co.uk {
+    handle /auth-templates/* {
+        root * /opt/supabase/ets2/volumes/auth/templates
+        file_server
+        uri strip_prefix /auth-templates
+    }
     reverse_proxy 127.0.0.1:8001
     encode zstd gzip
 }
@@ -39,6 +48,11 @@ studio.ets2.kylescudder.co.uk {
 
 # Deadwax Club iOS app
 api.deadwaxclub.app {
+    handle /auth-templates/* {
+        root * /opt/supabase/deadwax/volumes/auth/templates
+        file_server
+        uri strip_prefix /auth-templates
+    }
     reverse_proxy 127.0.0.1:8011
     encode zstd gzip
 }
@@ -50,25 +64,15 @@ studio.deadwax.kylescudder.co.uk {
 
 # Third hobby project — fill in once you've picked a domain
 # api.<project>.kylescudder.co.uk {
+#     handle /auth-templates/* {
+#         root * /opt/supabase/<project>/volumes/auth/templates
+#         file_server
+#         uri strip_prefix /auth-templates
+#     }
 #     reverse_proxy 127.0.0.1:8021
 #     encode zstd gzip
 # }
 # studio.<project>.kylescudder.co.uk {
 #     reverse_proxy 127.0.0.1:8021
 #     encode zstd gzip
-# }
-
-# ---------------------------------------------------------------------------
-# Alternative: multi-tenant Studio under one hostname with paths.
-#
-# This is fragile — Supabase Studio emits absolute /_next/* URLs that don't
-# survive the path-prefix strip, so the page renders blank. Kept as a comment
-# in case Supabase ever fixes that and the per-subdomain approach above
-# becomes overkill.
-# ---------------------------------------------------------------------------
-
-# studio.kylescudder.co.uk {
-#     handle /ets2/*    { uri strip_prefix /ets2;    reverse_proxy 127.0.0.1:8001 }
-#     handle /deadwax/* { uri strip_prefix /deadwax; reverse_proxy 127.0.0.1:8011 }
-#     handle { respond "supabase studio router — use /<project>" 200 }
 # }

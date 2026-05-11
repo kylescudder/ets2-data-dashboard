@@ -31,18 +31,12 @@ function LoginForm() {
       onSubmit={onSubmit}
       className="max-w-sm mx-auto mt-24 rounded-lg border border-edge bg-panel p-6"
     >
-      <h1 className="text-xl font-bold mb-1">ETS2 Tracker</h1>
+      <h1 className="text-lg font-bold mb-1 leading-tight">Euro Truck Simulator 2 Data Dashboard</h1>
       <p className="text-xs text-slate-500 mb-4">Sign in with a magic link.</p>
 
       {sent ? (
         <div className="text-sm text-green-300">
           Check your inbox — sent a link to <span className="font-mono">{email}</span>.
-          <div className="mt-2 text-xs text-slate-500">
-            On local dev, the link lands in Mailpit at{" "}
-            <a className="underline" href="http://127.0.0.1:54324" target="_blank" rel="noreferrer">
-              127.0.0.1:54324
-            </a>.
-          </div>
         </div>
       ) : (
         <>
