@@ -229,44 +229,54 @@ export function useLiveDrivers() {
       void refreshDrivers();
     }, REFRESH_MS);
 
-    const channel = supabase
-      .channel("telemetry-stream")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "telemetry" },
-        async (payload) => {
-          const row = payload.new as TelemetryRow;
-          const job = row.job_id ? await fetchJob(row.job_id) : null;
-          const info =
-            sessionInfo.current.get(row.session_id) ??
-            (await fetchSession(row.session_id));
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-          setDrivers((prev) =>
-            prev.map((d) =>
-              d.userId === row.user_id
-                ? {
-                    ...d,
-                    status: "online" as const,
-                    latest: rowToSample(row),
-                    truck: info?.truck ?? d.truck,
-                    fuelCapacityLitres:
-                      info?.fuelCapacityLitres ?? d.fuelCapacityLitres,
-                    job,
-                  }
-                : d,
-            ),
-          );
-          scheduleOffline(row.user_id, null);
-        },
-      )
-      .subscribe((status) => setConnected(status === "SUBSCRIBED"));
+    async function subscribeToTelemetry() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session?.access_token) supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel("telemetry-stream")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "telemetry" },
+          async (payload) => {
+            const row = payload.new as TelemetryRow;
+            const job = row.job_id ? await fetchJob(row.job_id) : null;
+            const info =
+              sessionInfo.current.get(row.session_id) ??
+              (await fetchSession(row.session_id));
+
+            setDrivers((prev) =>
+              prev.map((d) =>
+                d.userId === row.user_id
+                  ? {
+                      ...d,
+                      status: "online" as const,
+                      latest: rowToSample(row),
+                      truck: info?.truck ?? d.truck,
+                      fuelCapacityLitres:
+                        info?.fuelCapacityLitres ?? d.fuelCapacityLitres,
+                      job,
+                    }
+                  : d,
+              ),
+            );
+            scheduleOffline(row.user_id, null);
+          },
+        )
+        .subscribe((status) => setConnected(status === "SUBSCRIBED"));
+    }
+
+    void subscribeToTelemetry();
 
     return () => {
       cancelled = true;
       clearInterval(refreshInterval);
       for (const t of offlineTimers.current.values()) clearTimeout(t);
       offlineTimers.current.clear();
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 

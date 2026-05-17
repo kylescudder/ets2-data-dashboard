@@ -81,38 +81,48 @@ export function RecentTelemetryTable({
       setRows(recent);
     }
 
-    const channel = supabase
-      .channel(`recent-${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "telemetry",
-          filter: `user_id=eq.${userId}`,
-        },
-        async (payload) => {
-          const raw = payload.new as TelemetryInsert;
-          const jobs = raw.job_id ? await lookupJob(raw.job_id) : null;
-          const r: RecentRow = {
-            time: raw.time,
-            speed_kph: raw.speed_kph,
-            fuel_litres: raw.fuel_litres,
-            odometer_km: raw.odometer_km,
-            job_id: raw.job_id,
-            jobs,
-          };
-          setRows((prev) => [r, ...prev].slice(0, MAX_ROWS));
-        },
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function subscribeToTelemetry() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session?.access_token) supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel(`recent-${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "telemetry",
+            filter: `user_id=eq.${userId}`,
+          },
+          async (payload) => {
+            const raw = payload.new as TelemetryInsert;
+            const jobs = raw.job_id ? await lookupJob(raw.job_id) : null;
+            const r: RecentRow = {
+              time: raw.time,
+              speed_kph: raw.speed_kph,
+              fuel_litres: raw.fuel_litres,
+              odometer_km: raw.odometer_km,
+              job_id: raw.job_id,
+              jobs,
+            };
+            setRows((prev) => [r, ...prev].slice(0, MAX_ROWS));
+          },
+        )
+        .subscribe();
+    }
+
+    void subscribeToTelemetry();
     const refreshInterval = setInterval(() => {
       void refreshRows();
     }, REFRESH_MS);
     return () => {
       cancelled = true;
       clearInterval(refreshInterval);
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [userId]);
 
