@@ -4,7 +4,7 @@ export const ETS2_MAP_INFO = {
   y1: -64903.6953,
   y2: 88454.8359,
   minZoom: 0,
-  maxZoom: 7,
+  maxZoom: 6,
 } as const;
 
 const TILE_SIZE = 256;
