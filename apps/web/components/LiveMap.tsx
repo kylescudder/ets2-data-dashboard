@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer } from "react-leaflet";
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useLiveDrivers, type DriverRow } from "../lib/useLiveDrivers";
-import { simToLatLon } from "../lib/projection";
+import { ETS2_MAP_BOUNDS, ETS2_MAP_CENTER, ETS2_MAP_INFO, simToMapPoint } from "../lib/projection";
 import { formatSpeed, useUnits } from "../lib/units";
 
 const TRAIL_MAX = 80;
+const MAP_BOUNDS = L.latLngBounds(ETS2_MAP_BOUNDS);
 
 function avatarIcon(d: DriverRow) {
   const url = d.avatarUrl ?? "";
@@ -29,6 +30,18 @@ function avatarIcon(d: DriverRow) {
   });
 }
 
+function MapBounds() {
+  const map = useMap();
+
+  useEffect(() => {
+    map.fitBounds(MAP_BOUNDS, { animate: false });
+    const fitZoom = map.getBoundsZoom(MAP_BOUNDS, true);
+    if (fitZoom > map.getMinZoom()) map.setMinZoom(fitZoom);
+  }, [map]);
+
+  return null;
+}
+
 export function LiveMap() {
   const { drivers, connected } = useLiveDrivers();
   const { units } = useUnits();
@@ -40,7 +53,7 @@ export function LiveMap() {
     for (const d of drivers) {
       if (d.status !== "online" || !d.latest) continue;
       const trail = trailsRef.current.get(d.userId) ?? [];
-      const point = simToLatLon(d.latest.position.x, d.latest.position.z);
+      const point = simToMapPoint(d.latest.position.x, d.latest.position.z);
       const last = trail[trail.length - 1];
       if (!last || last[0] !== point[0] || last[1] !== point[1]) {
         trailsRef.current.set(d.userId, [...trail, point].slice(-TRAIL_MAX));
@@ -55,15 +68,24 @@ export function LiveMap() {
   return (
     <div className="relative -mx-6 -my-8" style={{ height: "calc(100vh - 73px)" }}>
       <MapContainer
-        center={[50.5, 10]}
-        zoom={5}
+        center={ETS2_MAP_CENTER}
+        zoom={2}
+        crs={L.CRS.Simple}
+        minZoom={ETS2_MAP_INFO.minZoom}
+        maxZoom={ETS2_MAP_INFO.maxZoom}
+        maxBounds={MAP_BOUNDS}
+        maxBoundsViscosity={1}
         scrollWheelZoom
         className="w-full h-full"
         style={{ background: "#0b0f17" }}
       >
+        <MapBounds />
         <TileLayer
-          attribution='&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          minZoom={ETS2_MAP_INFO.minZoom}
+          maxZoom={ETS2_MAP_INFO.maxZoom}
+          maxNativeZoom={ETS2_MAP_INFO.maxZoom}
+          noWrap
+          url="/ets2-map/Tiles/{z}/{x}/{y}.png"
         />
         {online.map((d) => {
           const trail = trailsRef.current.get(d.userId) ?? [];
@@ -78,7 +100,7 @@ export function LiveMap() {
         })}
         {online.map((d) => {
           const sample = d.latest!;
-          const pos = simToLatLon(sample.position.x, sample.position.z);
+          const pos = simToMapPoint(sample.position.x, sample.position.z);
           return (
             <Marker key={d.userId} position={pos} icon={avatarIcon(d)}>
               <Popup>

@@ -1,8 +1,25 @@
-// Affine fit from simulator (x, z) coords to WGS84 (lat, lon), least-squares fit
-// against the 10 fixture cities in apps/api/src/fixtures.ts. Accurate to ~1-2°.
-// Recompute the coefficients if the fixture city set changes substantially.
-export function simToLatLon(x: number, z: number): [number, number] {
-  const lat = 0.000644 * x - 0.004378 * z + 50.079;
-  const lon = 0.005782 * x - 0.000786 * z + 5.651;
-  return [lat, lon];
+export const ETS2_MAP_INFO = {
+  x1: -67572.39,
+  x2: 85786.14,
+  y1: -64903.6953,
+  y2: 88454.8359,
+  minZoom: 0,
+  maxZoom: 7,
+} as const;
+
+const TILE_SIZE = 256;
+const MAP_UNITS = TILE_SIZE;
+
+export const ETS2_MAP_BOUNDS: [[number, number], [number, number]] = [
+  [-MAP_UNITS, 0],
+  [0, MAP_UNITS],
+];
+
+export const ETS2_MAP_CENTER: [number, number] = [-MAP_UNITS / 2, MAP_UNITS / 2];
+
+export function simToMapPoint(x: number, z: number): [number, number] {
+  const nx = (x - ETS2_MAP_INFO.x1) / (ETS2_MAP_INFO.x2 - ETS2_MAP_INFO.x1);
+  const ny = (z - ETS2_MAP_INFO.y1) / (ETS2_MAP_INFO.y2 - ETS2_MAP_INFO.y1);
+
+  return [(ny - 1) * MAP_UNITS, nx * MAP_UNITS];
 }
