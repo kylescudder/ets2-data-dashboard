@@ -17,6 +17,7 @@ export interface DriverRow {
 }
 
 const ONLINE_TTL_MS = 30_000;
+const REFRESH_MS = 10_000;
 
 interface TelemetryRow {
   time: string;
@@ -155,14 +156,14 @@ export function useLiveDrivers() {
       return info;
     }
 
-    async function loadInitial() {
+    async function refreshDrivers() {
       const since = new Date(Date.now() - ONLINE_TTL_MS).toISOString();
 
       const { data: users, error: usersErr } = await supabase
         .from("users")
         .select("id, name, display_name, avatar_url")
         .order("display_name");
-      if (usersErr || !users || cancelled) return;
+      if (usersErr || !users || cancelled) return false;
 
       const { data: recent } = await supabase
         .from("telemetry")
@@ -201,7 +202,7 @@ export function useLiveDrivers() {
         }
       }
 
-      if (cancelled) return;
+      if (cancelled) return false;
       setDrivers(
         users.map((u) => {
           const latest = latestByUser.get(u.id);
@@ -220,9 +221,13 @@ export function useLiveDrivers() {
         }),
       );
       for (const [userId, row] of latestByUser) scheduleOffline(userId, row.time);
+      return true;
     }
 
-    loadInitial();
+    refreshDrivers();
+    const refreshInterval = setInterval(() => {
+      void refreshDrivers();
+    }, REFRESH_MS);
 
     const channel = supabase
       .channel("telemetry-stream")
@@ -258,6 +263,7 @@ export function useLiveDrivers() {
 
     return () => {
       cancelled = true;
+      clearInterval(refreshInterval);
       for (const t of offlineTimers.current.values()) clearTimeout(t);
       offlineTimers.current.clear();
       supabase.removeChannel(channel);

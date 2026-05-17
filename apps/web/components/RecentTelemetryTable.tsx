@@ -28,6 +28,7 @@ interface TelemetryInsert {
 }
 
 const MAX_ROWS = 200;
+const REFRESH_MS = 10_000;
 
 export function RecentTelemetryTable({
   userId,
@@ -50,6 +51,7 @@ export function RecentTelemetryTable({
 
   useEffect(() => {
     const supabase = supabaseBrowser();
+    let cancelled = false;
 
     async function lookupJob(jobId: string): Promise<JobInfo | null> {
       const cached = jobCache.current.get(jobId);
@@ -62,6 +64,21 @@ export function RecentTelemetryTable({
       if (!data) return null;
       jobCache.current.set(jobId, data);
       return data;
+    }
+
+    async function refreshRows() {
+      const { data } = await supabase
+        .from("telemetry")
+        .select("time, speed_kph, fuel_litres, odometer_km, job_id, jobs ( cargo, source_city, destination_city )")
+        .eq("user_id", userId)
+        .order("time", { ascending: false })
+        .limit(MAX_ROWS);
+      if (cancelled || !data) return;
+      const recent = data as unknown as RecentRow[];
+      for (const r of recent) {
+        if (r.job_id && r.jobs) jobCache.current.set(r.job_id, r.jobs);
+      }
+      setRows(recent);
     }
 
     const channel = supabase
@@ -89,7 +106,12 @@ export function RecentTelemetryTable({
         },
       )
       .subscribe();
+    const refreshInterval = setInterval(() => {
+      void refreshRows();
+    }, REFRESH_MS);
     return () => {
+      cancelled = true;
+      clearInterval(refreshInterval);
       supabase.removeChannel(channel);
     };
   }, [userId]);
