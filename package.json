@@ -2,7 +2,7 @@
   "name": "ets2-data-dashboard",
   "private": true,
   "version": "0.0.1",
-  "packageManager": "bun@1.2.16",
+  "packageManager": "bun@1.4.4",
   "workspaces": [
     "apps/*",
     "packages/*"
